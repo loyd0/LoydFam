@@ -90,23 +90,21 @@ export default function DataQualityPage() {
             { key: "INFO", label: "Info", color: "text-blue-500", count: counts.INFO },
           ] as const
         ).map((s) => (
-          <Card
+          <button
             key={s.key}
-            className={`border-border/50 bg-card/80 backdrop-blur cursor-pointer transition-colors ${
+            onClick={() => setSeverityFilter(severityFilter === s.key ? "" : s.key)}
+            className={`w-full text-left rounded-xl border border-border/50 bg-card/80 backdrop-blur cursor-pointer transition-colors hover:bg-card ${
               severityFilter === s.key ? "ring-2 ring-primary" : ""
             }`}
-            onClick={() =>
-              setSeverityFilter(severityFilter === s.key ? "" : s.key)
-            }
           >
-            <CardContent className="flex items-center gap-3 pt-4">
+            <div className="flex items-center gap-3 p-4">
               <ShieldAlert className={`h-5 w-5 ${s.color}`} />
               <div>
                 <p className="text-xl font-bold">{s.count}</p>
                 <p className="text-xs text-muted-foreground">{s.label}</p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </button>
         ))}
       </div>
 

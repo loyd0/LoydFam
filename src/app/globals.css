@@ -108,7 +108,155 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* ─── Page-level animation utilities ──────────────────────────── */
+@layer utilities {
+
+  /* Staggered fade+rise for page sections */
+  .animate-page-in>* {
+    animation: page-section-in 0.35s ease both;
+  }
+
+  .animate-page-in>*:nth-child(1) {
+    animation-delay: 0ms;
+  }
+
+  .animate-page-in>*:nth-child(2) {
+    animation-delay: 60ms;
+  }
+
+  .animate-page-in>*:nth-child(3) {
+    animation-delay: 120ms;
+  }
+
+  .animate-page-in>*:nth-child(4) {
+    animation-delay: 180ms;
+  }
+
+  .animate-page-in>*:nth-child(5) {
+    animation-delay: 240ms;
+  }
+
+  @keyframes page-section-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Shimmer effect for loading states */
+  .shimmer {
+    background: linear-gradient(90deg, transparent 25%, oklch(0.93 0.015 155 / 0.5) 50%, transparent 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+  }
+
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+
+    to {
+      background-position: -200% 0;
+    }
+  }
+
+  /* Smooth card hover lift */
+  .card-lift {
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+  }
+
+  .card-lift:hover {
+    box-shadow: 0 4px 20px oklch(0.35 0.08 155 / 0.08);
+    transform: translateY(-1px);
+  }
+
+  /* Mobile safe area bottom padding */
+  .safe-area-inset-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* ─── Print styles ────────────────────────────────────────────── */
+@media print {
+
+  /* Hide all chrome */
+  aside,
+  header,
+  nav,
+  [data-sidebar],
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Full-width layout */
+  body {
+    font-size: 12pt;
+    background: white;
+    color: black;
+  }
+
+  main {
+    padding: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    max-width: none !important;
+  }
+
+  /* Card styling for print */
+  .rounded-xl,
+  .rounded-lg,
+  [class*="border-border"] {
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+    background: white !important;
+  }
+
+  /* Hide backdrop blur (doesn't print) */
+  [class*="backdrop-blur"] {
+    backdrop-filter: none !important;
+    background: white !important;
+  }
+
+  /* Page break helpers */
+  .print\:break-before {
+    page-break-before: always;
+  }
+
+  /* Family header */
+  .print\:text-black {
+    color: black !important;
+  }
+
+  /* Make links look clean */
+  a {
+    text-decoration: none;
+    color: black;
+  }
+}
+
+/* ─── Mobile scroll smoothness ────────────────────────────────── */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Improve touch targets on mobile */
+  button,
+  a,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
   }
 }

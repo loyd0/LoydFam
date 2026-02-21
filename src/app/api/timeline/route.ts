@@ -14,10 +14,18 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(100, parseInt(searchParams.get("limit") || "50", 10));
   const skip = (page - 1) * limit;
 
+  const yearFrom = searchParams.get("yearFrom") ? parseInt(searchParams.get("yearFrom")!, 10) : null;
+  const yearTo = searchParams.get("yearTo") ? parseInt(searchParams.get("yearTo")!, 10) : null;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {};
   if (type && ["BIRTH", "DEATH", "MARRIAGE", "RESIDENCE", "OTHER"].includes(type)) {
     where.type = type;
+  }
+  if (yearFrom !== null || yearTo !== null) {
+    where.dateYear = {};
+    if (yearFrom !== null) where.dateYear.gte = yearFrom;
+    if (yearTo !== null) where.dateYear.lte = yearTo;
   }
 
   const [events, total] = await Promise.all([

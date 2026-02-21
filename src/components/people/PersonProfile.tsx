@@ -18,6 +18,7 @@ import {
   Skull,
   Church,
   ExternalLink,
+  Printer,
 } from "lucide-react";
 
 interface PersonEvent {
@@ -262,11 +263,11 @@ export function PersonProfile({
   const generation = person.legacyGeneration ?? person.generationFromWilliam;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 print:p-0">
       {/* Header */}
       <div className="flex items-start gap-4">
         {standalone && (
-          <Button asChild variant="ghost" size="icon" className="mt-1 shrink-0">
+          <Button asChild variant="ghost" size="icon" className="mt-1 shrink-0 print:hidden">
             <Link href="/people">
               <ArrowLeft className="h-4 w-4" />
             </Link>
@@ -320,6 +321,17 @@ export function PersonProfile({
                 <ExternalLink className="h-3.5 w-3.5" />
                 View Full Profile
               </Link>
+            </Button>
+          )}
+          {standalone && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3 gap-1.5 print:hidden"
+              onClick={() => window.print()}
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Print Profile
             </Button>
           )}
         </div>

@@ -71,28 +71,30 @@ function PersonNodeComponent({ data }: { data: TreePerson }) {
   const isFemale = data.gender === "FEMALE";
   const dimmed = data.isLoyd === false; // non-Loyd leaf node
 
-  const borderColor = dimmed
-    ? "border-dashed border-border/50"
+  const borderStyle = dimmed
+    ? { borderStyle: "dashed", borderColor: "var(--color-border)", opacity: 0.5 }
     : isMale
-    ? "border-[oklch(0.35_0.08_155)]"
+    ? { borderColor: "var(--node-male)" }
     : isFemale
-    ? "border-[oklch(0.50_0.10_155)]"
-    : "border-border";
+    ? { borderColor: "var(--node-female)" }
+    : { borderColor: "var(--color-border)" };
 
-  const bgColor = dimmed
-    ? "bg-muted/30"
+  const bgStyle = dimmed
+    ? { backgroundColor: "var(--color-muted)" }
     : isMale
-    ? "bg-[oklch(0.35_0.08_155/0.06)]"
+    ? { backgroundColor: "var(--node-male-bg)" }
     : isFemale
-    ? "bg-[oklch(0.50_0.10_155/0.06)]"
-    : "bg-card";
+    ? { backgroundColor: "var(--node-female-bg)" }
+    : { backgroundColor: "var(--color-card)" };
+
 
   const shortName = data.displayName.split("(")[0]?.trim() || data.displayName;
   const years = `${data.birthYear ?? "?"}\u2013${data.isLiving ? "living" : data.deathYear ?? "?"}`;
 
   return (
     <div
-      className={`rounded-lg border-2 ${borderColor} ${bgColor} px-3 py-2 shadow-sm min-w-[140px] text-center cursor-pointer hover:shadow-md transition-shadow${dimmed ? " opacity-60" : ""}`}
+      className={`rounded-lg border-2 px-3 py-2 shadow-sm min-w-[140px] text-center cursor-pointer hover:shadow-md transition-shadow${dimmed ? " opacity-60" : ""}`}
+      style={{ ...borderStyle, ...bgStyle }}
     >
       <p className={`text-xs font-semibold truncate max-w-[160px]${dimmed ? " text-muted-foreground" : ""}`}>
         {shortName}
@@ -133,13 +135,21 @@ function ProfileCard({
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               <div
-                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                  person.gender === "MALE"
-                    ? "bg-primary/10 text-primary"
-                    : person.gender === "FEMALE"
-                    ? "bg-[oklch(0.50_0.10_155/0.15)] text-[oklch(0.35_0.08_155)]"
-                    : "bg-muted text-muted-foreground"
-                }`}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+                style={{
+                  backgroundColor:
+                    person.gender === "MALE"
+                      ? "var(--node-male-bg)"
+                      : person.gender === "FEMALE"
+                      ? "var(--node-female-bg)"
+                      : "var(--color-muted)",
+                  color:
+                    person.gender === "MALE"
+                      ? "var(--node-male)"
+                      : person.gender === "FEMALE"
+                      ? "var(--node-female)"
+                      : "var(--color-muted-foreground)",
+                }}
               >
                 <UserIcon className="h-5 w-5" />
               </div>
@@ -428,7 +438,7 @@ export default function TreePage() {
                 defaultEdgeOptions={{
                   type: "smoothstep",
                   animated: false,
-                  style: { stroke: "oklch(0.75 0.04 155)", strokeWidth: 1.5 },
+                  style: { stroke: "var(--color-border)", strokeWidth: 1.5 },
                 }}
               >
                 <Background gap={20} size={1} />
@@ -436,11 +446,12 @@ export default function TreePage() {
                 <MiniMap
                   nodeColor={(n) => {
                     const data = n.data as unknown as TreePerson;
-                    if (data.gender === "MALE") return "oklch(0.35 0.08 155)";
-                    if (data.gender === "FEMALE") return "oklch(0.55 0.10 155)";
-                    return "rgb(156, 163, 175)";
+                    const isDark = document.documentElement.classList.contains("dark");
+                    if (data.gender === "MALE") return isDark ? "oklch(0.68 0.18 155)" : "oklch(0.32 0.10 155)";
+                    if (data.gender === "FEMALE") return isDark ? "oklch(0.68 0.18 220)" : "oklch(0.48 0.14 220)";
+                    return isDark ? "rgb(100, 116, 139)" : "rgb(156, 163, 175)";
                   }}
-                  maskColor="rgba(0, 0, 0, 0.06)"
+                  maskColor={document.documentElement.classList.contains("dark") ? "rgba(0,0,0,0.25)" : "rgba(0,0,0,0.06)"}
                 />
               </ReactFlow>
 

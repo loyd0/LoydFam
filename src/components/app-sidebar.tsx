@@ -26,6 +26,9 @@ import {
   ShieldAlert,
   Settings,
   LogOut,
+  GitMerge,
+  Layers,
+  PieChart,
 } from "lucide-react";
 
 const mainNav = [
@@ -34,6 +37,9 @@ const mainNav = [
   { title: "Family Tree", href: "/tree", icon: TreePine },
   { title: "Timeline", href: "/timeline", icon: Clock },
   { title: "Stats", href: "/stats", icon: BarChart3 },
+  { title: "Generations", href: "/generations", icon: Layers },
+  { title: "Fan Chart", href: "/fan-chart", icon: PieChart },
+  { title: "Relationship", href: "/relationship", icon: GitMerge },
 ];
 
 const adminNav = [
