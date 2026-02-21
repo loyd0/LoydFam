@@ -1,0 +1,631 @@
+// Loyd Family History System — Complete Prisma Schema
+// Implements the full data model from BUILD.md
+
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [pgTrgm(map: "pg_trgm"), unaccent]
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUTH (Auth.js / NextAuth)
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          UserRole  @default(MEMBER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts    Account[]
+  sessions    Session[]
+  notes       Note[]
+  savedViews  SavedView[]
+  activities  Activity[]  @relation("actor")
+  mediaUploads Media[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Invite {
+  id        String       @id @default(cuid())
+  email     String       @unique
+  role      UserRole     @default(MEMBER)
+  status    InviteStatus @default(PENDING)
+  invitedBy String?
+  createdAt DateTime     @default(now())
+  usedAt    DateTime?
+
+  @@map("invites")
+}
+
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
+// ─────────────────────────────────────────────────────────────
+// RAW IMPORT STORAGE (preserve everything from Excel)
+// ─────────────────────────────────────────────────────────────
+
+model SourceFile {
+  id               String   @id @default(uuid())
+  originalFilename String
+  sha256           String   @unique
+  uploadedByUserId String?
+  uploadedAt       DateTime @default(now())
+  blobUrl          String?
+
+  importRuns ImportRun[]
+
+  @@map("source_files")
+}
+
+model ImportRun {
+  id           String          @id @default(uuid())
+  sourceFileId String
+  status       ImportRunStatus @default(QUEUED)
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  summary      Json?
+  appVersion   String?
+
+  sourceFile SourceFile    @relation(fields: [sourceFileId], references: [id])
+  sheets     ImportSheet[]
+  issues     ImportIssue[]
+
+  @@map("import_runs")
+}
+
+model ImportSheet {
+  id          String @id @default(uuid())
+  importRunId String
+  sheetName   String
+  rowCount    Int    @default(0)
+
+  importRun ImportRun   @relation(fields: [importRunId], references: [id])
+  rows      ImportRow[]
+
+  @@map("import_sheets")
+}
+
+model ImportRow {
+  id            String  @id @default(uuid())
+  importSheetId String
+  rowIndex      Int
+  rowJson       Json
+  rowHash       String?
+  isBlank       Boolean @default(false)
+
+  importSheet ImportSheet      @relation(fields: [importSheetId], references: [id])
+  entityLinks ImportEntityLink[]
+
+  @@map("import_rows")
+}
+
+model ImportEntityLink {
+  id         String             @id @default(uuid())
+  importRowId String
+  entityType ImportEntityType
+  entityId   String
+  reason     String?
+
+  importRow ImportRow @relation(fields: [importRowId], references: [id])
+
+  @@map("import_entity_links")
+}
+
+model ImportIssue {
+  id          String              @id @default(uuid())
+  importRunId String
+  severity    ImportIssueSeverity
+  code        String
+  message     String
+  sheetName   String?
+  rowIndex    Int?
+  entityType  String?
+  entityId    String?
+  meta        Json?
+
+  importRun ImportRun @relation(fields: [importRunId], references: [id])
+
+  @@map("import_issues")
+}
+
+enum ImportRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum ImportEntityType {
+  PERSON
+  EVENT
+  RELATIONSHIP
+  PLACE
+  MEDIA
+  TAG
+  NOTE
+  CONTACT
+}
+
+enum ImportIssueSeverity {
+  INFO
+  WARNING
+  ERROR
+}
+
+// ─────────────────────────────────────────────────────────────
+// CANONICAL ENTITIES: People
+// ─────────────────────────────────────────────────────────────
+
+model Person {
+  id                    String  @id @default(uuid())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  isPlaceholder         Boolean @default(false)
+  primaryExternalKey    String  @unique
+  sourceSystem          String?
+  externalId            String?
+  branchRootExternalId  String?
+  gender                Gender  @default(UNKNOWN)
+  surname               String?
+  givenName1            String?
+  givenName2            String?
+  givenName3            String?
+  knownAs               String?
+  birthName             String?
+  preferredName         String?
+  displayName           String
+  dspFlag               Boolean?
+  residencyText         String?
+  biographyMd           String? @db.Text
+  biographyShortMd      String? @db.Text
+  notesMd               String? @db.Text
+  expectedPhotoCount    Int?
+  legacyGeneration      Int?
+  generationFromWilliam Int?
+  descendantGeneration  String?
+  lengthMetric          String?
+  rawNameString         String?
+
+  // Relations
+  aliases           PersonAlias[]
+  events            PersonEvent[]
+  parentRelations   ParentChild[]  @relation("child")
+  childRelations    ParentChild[]  @relation("parent")
+  partnershipsA     Partnership[]  @relation("partnerA")
+  partnershipsB     Partnership[]  @relation("partnerB")
+  mediaLinks        MediaLink[]    @relation("personMedia")
+  notes             Note[]         @relation("personNotes")
+  tagLinks          TagLink[]      @relation("personTags")
+  contact           Contact?
+  personPlaces      PersonPlace[]
+
+  @@index([displayName(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([surname(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([knownAs(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("people")
+}
+
+model PersonAlias {
+  id       String  @id @default(uuid())
+  personId String
+  label    String
+  value    String
+  source   String?
+
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@map("person_aliases")
+}
+
+model EntityAttribute {
+  id              String              @id @default(uuid())
+  entityType      EntityAttributeType
+  entityId        String
+  key             String
+  valueText       String?
+  valueJson       Json?
+  sourceImportRowId String?
+
+  @@index([entityType, entityId])
+  @@map("entity_attributes")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  UNKNOWN
+}
+
+enum EntityAttributeType {
+  PERSON
+  RELATIONSHIP
+  EVENT
+  PLACE
+  MEDIA
+}
+
+// ─────────────────────────────────────────────────────────────
+// EVENTS (birth / death / marriage / etc.)
+// ─────────────────────────────────────────────────────────────
+
+model Event {
+  id            String    @id @default(uuid())
+  type          EventType
+  title         String?
+  descriptionMd String?   @db.Text
+  dateExact     DateTime? @db.Date
+  dateYear      Int?
+  dateMonth     Int?
+  dateDay       Int?
+  dateText      String?
+  dateIsApprox  Boolean   @default(false)
+  placeId       String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  place        Place?       @relation(fields: [placeId], references: [id])
+  personEvents PersonEvent[]
+
+  // Marriage events linked from partnerships
+  partnershipStarts Partnership[] @relation("startEvent")
+  partnershipEnds   Partnership[] @relation("endEvent")
+
+  @@map("events")
+}
+
+model PersonEvent {
+  id       String  @id @default(uuid())
+  personId String
+  eventId  String
+  role     String?
+
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([personId, eventId, role])
+  @@map("person_events")
+}
+
+enum EventType {
+  BIRTH
+  DEATH
+  MARRIAGE
+  RESIDENCE
+  OTHER
+}
+
+// ─────────────────────────────────────────────────────────────
+// RELATIONSHIPS
+// ─────────────────────────────────────────────────────────────
+
+model ParentChild {
+  id       String              @id @default(uuid())
+  parentId String
+  childId  String
+  type     ParentChildType     @default(UNKNOWN)
+  notesMd  String?             @db.Text
+
+  parent Person @relation("parent", fields: [parentId], references: [id], onDelete: Cascade)
+  child  Person @relation("child", fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([parentId, childId])
+  @@map("parent_child")
+}
+
+model Partnership {
+  id           String          @id @default(uuid())
+  personAId    String
+  personBId    String
+  type         PartnershipType @default(UNKNOWN)
+  startEventId String?
+  endEventId   String?
+  notesMd      String?         @db.Text
+
+  personA    Person @relation("partnerA", fields: [personAId], references: [id], onDelete: Cascade)
+  personB    Person @relation("partnerB", fields: [personBId], references: [id], onDelete: Cascade)
+  startEvent Event? @relation("startEvent", fields: [startEventId], references: [id])
+  endEvent   Event? @relation("endEvent", fields: [endEventId], references: [id])
+
+  @@unique([personAId, personBId])
+  @@map("partnerships")
+}
+
+enum ParentChildType {
+  BIOLOGICAL
+  STEP
+  ADOPTIVE
+  UNKNOWN
+}
+
+enum PartnershipType {
+  MARRIAGE
+  PARTNER
+  UNKNOWN
+}
+
+// ─────────────────────────────────────────────────────────────
+// MEDIA (photos + attachments)
+// ─────────────────────────────────────────────────────────────
+
+model Media {
+  id              String    @id @default(uuid())
+  type            MediaType
+  blobUrl         String
+  blobKey         String?
+  mimeType        String?
+  fileSize        Int?
+  width           Int?
+  height          Int?
+  caption         String?
+  takenDateExact  DateTime? @db.Date
+  takenDateText   String?
+  createdByUserId String?
+  createdAt       DateTime  @default(now())
+
+  createdBy  User?      @relation(fields: [createdByUserId], references: [id])
+  mediaLinks MediaLink[]
+
+  @@map("media")
+}
+
+model MediaLink {
+  id         String          @id @default(uuid())
+  mediaId    String
+  entityType MediaLinkEntity
+  entityId   String
+  isPrimary  Boolean         @default(false)
+  sortOrder  Int             @default(0)
+
+  media  Media  @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  person Person? @relation("personMedia", fields: [entityId], references: [id], map: "media_links_person_fk")
+
+  @@map("media_links")
+}
+
+enum MediaType {
+  PHOTO
+  DOCUMENT
+  OTHER
+}
+
+enum MediaLinkEntity {
+  PERSON
+  EVENT
+}
+
+// ─────────────────────────────────────────────────────────────
+// NOTES (markdown + TipTap)
+// ─────────────────────────────────────────────────────────────
+
+model Note {
+  id              String         @id @default(uuid())
+  entityType      NoteEntityType
+  entityId        String
+  title           String?
+  markdown        String         @db.Text
+  tiptapJson      Json?
+  createdByUserId String
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  createdBy User    @relation(fields: [createdByUserId], references: [id])
+  person    Person? @relation("personNotes", fields: [entityId], references: [id], map: "notes_person_fk")
+
+  @@index([entityType, entityId])
+  @@map("notes")
+}
+
+enum NoteEntityType {
+  PERSON
+  EVENT
+  RELATIONSHIP
+  PLACE
+}
+
+// ─────────────────────────────────────────────────────────────
+// TAGS + SAVED VIEWS
+// ─────────────────────────────────────────────────────────────
+
+model Tag {
+  id     String  @id @default(uuid())
+  name   String  @unique
+  colour String?
+
+  tagLinks TagLink[]
+
+  @@map("tags")
+}
+
+model TagLink {
+  id         String         @id @default(uuid())
+  tagId      String
+  entityType TagLinkEntity
+  entityId   String
+
+  tag    Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  person Person? @relation("personTags", fields: [entityId], references: [id], map: "tag_links_person_fk")
+
+  @@unique([tagId, entityType, entityId])
+  @@map("tag_links")
+}
+
+enum TagLinkEntity {
+  PERSON
+  EVENT
+  RELATIONSHIP
+  MEDIA
+  NOTE
+}
+
+model SavedView {
+  id         String         @id @default(uuid())
+  userId     String
+  name       String
+  scope      SavedViewScope
+  filterJson Json
+  createdAt  DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("saved_views")
+}
+
+enum SavedViewScope {
+  PEOPLE
+  STATS
+  TREE
+  TIMELINE
+}
+
+// ─────────────────────────────────────────────────────────────
+// CONTACTS
+// ─────────────────────────────────────────────────────────────
+
+model Contact {
+  id                   String   @id @default(uuid())
+  personId             String   @unique
+  emails               String[]
+  mobile               String?
+  landline             String?
+  address2000          String?
+  postalAddress2021    String?
+  establishingContact  String?
+  comments             String?
+  ageCurrentExcel      Int?
+  numberOfKids2000     Int?
+
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@map("contacts")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ACTIVITY / CHANGE FEED
+// ─────────────────────────────────────────────────────────────
+
+model Activity {
+  id            String       @id @default(uuid())
+  type          ActivityType
+  actorUserId   String?
+  entityType    String?
+  entityId      String?
+  message       String
+  meta          Json?
+  createdAt     DateTime     @default(now())
+
+  actor User? @relation("actor", fields: [actorUserId], references: [id])
+
+  @@index([createdAt(sort: Desc)])
+  @@map("activities")
+}
+
+enum ActivityType {
+  IMPORT_RUN
+  NOTE_CREATED
+  MEDIA_ADDED
+  TAG_ADDED
+  ENTITY_UPDATED
+}
+
+// ─────────────────────────────────────────────────────────────
+// PLACES
+// ─────────────────────────────────────────────────────────────
+
+model Place {
+  id         String    @id @default(uuid())
+  type       PlaceType
+  name       String
+  address    String?
+  country    String?
+  lat        Float?
+  lng        Float?
+  sourceText String?
+
+  events       Event[]
+  personPlaces PersonPlace[]
+
+  @@map("places")
+}
+
+model PersonPlace {
+  id          String  @id @default(uuid())
+  personId    String
+  placeId     String
+  fromEventId String?
+  toEventId   String?
+  notesMd     String? @db.Text
+
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  place  Place  @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@map("person_places")
+}
+
+enum PlaceType {
+  COUNTRY
+  REGION
+  CITY
+  ADDRESS
+  HOUSE
+  CEMETERY
+  OTHER
+}
