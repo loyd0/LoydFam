@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useViewMode } from "@/hooks/use-view-mode";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +49,7 @@ const genderColor = (g: string) =>
     : "bg-muted text-muted-foreground border-border";
 
 export default function RelationshipPage() {
+  const { isLoydOnly } = useViewMode();
   const [people, setPeople] = useState<PersonOption[]>([]);
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [personA, setPersonA] = useState("");
@@ -56,23 +58,25 @@ export default function RelationshipPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/people?limit=500&page=1")
+    const qs = isLoydOnly ? "&loydOnly=true" : "";
+    fetch(`/api/people?limit=500&page=1${qs}`)
       .then((r) => r.json())
       .then((d) => setPeople(d.people ?? []))
       .finally(() => setLoadingPeople(false));
-  }, []);
+  }, [isLoydOnly]);
 
   const find = useCallback(async () => {
     if (!personA || !personB) return;
     setLoading(true);
     setResult(null);
     try {
-      const res = await fetch(`/api/relationship?a=${personA}&b=${personB}`);
+      const loydParam = isLoydOnly ? "&loydOnly=true" : "";
+      const res = await fetch(`/api/relationship?a=${personA}&b=${personB}${loydParam}`);
       if (res.ok) setResult(await res.json());
     } finally {
       setLoading(false);
     }
-  }, [personA, personB]);
+  }, [personA, personB, isLoydOnly]);
 
   const personAData = people.find((p) => p.id === personA);
   const personBData = people.find((p) => p.id === personB);

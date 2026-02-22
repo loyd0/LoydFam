@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { loydOnlyWhere, parseLoydOnly } from "@/lib/loyd-filter";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -10,22 +11,32 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q")?.trim() || "";
+  const loydOnly = parseLoydOnly(searchParams);
 
   if (q.length < 2) {
     return NextResponse.json({ people: [], events: [] });
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const andClauses: any[] = [
+    { isPlaceholder: false },
+    {
+      OR: [
+        { displayName: { contains: q, mode: "insensitive" } },
+        { surname: { contains: q, mode: "insensitive" } },
+        { givenName1: { contains: q, mode: "insensitive" } },
+        { knownAs: { contains: q, mode: "insensitive" } },
+      ],
+    },
+  ];
+
+  if (loydOnly) {
+    andClauses.push(loydOnlyWhere());
+  }
+
   const [people, events] = await Promise.all([
     prisma.person.findMany({
-      where: {
-        isPlaceholder: false,
-        OR: [
-          { displayName: { contains: q, mode: "insensitive" } },
-          { surname: { contains: q, mode: "insensitive" } },
-          { givenName1: { contains: q, mode: "insensitive" } },
-          { knownAs: { contains: q, mode: "insensitive" } },
-        ],
-      },
+      where: { AND: andClauses },
       take: 15,
       select: {
         id: true,
@@ -43,33 +54,61 @@ export async function GET(request: NextRequest) {
       orderBy: { displayName: "asc" },
     }),
 
-    prisma.event.findMany({
-      where: {
-        dateYear: { not: null },
-        personEvents: {
-          some: {
-            person: {
-              isPlaceholder: false,
+    loydOnly
+      ? // When filtering to Loyds, only show events involving Loyd people
+        prisma.event.findMany({
+          where: {
+            dateYear: { not: null },
+            type: { in: ["BIRTH", "DEATH", "MARRIAGE"] },
+            personEvents: {
+              some: {
+                person: {
+                  isPlaceholder: false,
+                  OR: loydOnlyWhere().OR,
+                },
+              },
             },
           },
-        },
-        type: { in: ["BIRTH", "DEATH", "MARRIAGE"] },
-      },
-      take: 8,
-      select: {
-        id: true,
-        type: true,
-        dateYear: true,
-        dateText: true,
-        personEvents: {
-          take: 2,
+          take: 8,
           select: {
-            person: { select: { id: true, displayName: true } },
+            id: true,
+            type: true,
+            dateYear: true,
+            dateText: true,
+            personEvents: {
+              take: 2,
+              select: {
+                person: { select: { id: true, displayName: true } },
+              },
+            },
           },
-        },
-      },
-      orderBy: [{ dateYear: "asc" }],
-    }),
+          orderBy: [{ dateYear: "asc" }],
+        })
+      : prisma.event.findMany({
+          where: {
+            dateYear: { not: null },
+            personEvents: {
+              some: {
+                person: { isPlaceholder: false },
+              },
+            },
+            type: { in: ["BIRTH", "DEATH", "MARRIAGE"] },
+          },
+          take: 8,
+          select: {
+            id: true,
+            type: true,
+            dateYear: true,
+            dateText: true,
+            personEvents: {
+              take: 2,
+              select: {
+                person: { select: { id: true, displayName: true } },
+              },
+            },
+          },
+          orderBy: [{ dateYear: "asc" }],
+        }),
   ]);
 
   return NextResponse.json({

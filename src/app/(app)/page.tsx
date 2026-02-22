@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useViewMode } from "@/hooks/use-view-mode";
 import {
   Card,
   CardContent,
@@ -122,6 +123,7 @@ const quickLinks = [
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { isLoydOnly } = useViewMode();
   const [data, setData] = useState<DashboardData | null>(null);
   const [todayData, setTodayData] = useState<TodayData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -129,16 +131,17 @@ export default function DashboardPage() {
 
   const loadDashboard = useCallback(async () => {
     try {
+      const qs = isLoydOnly ? "?loydOnly=true" : "";
       const [dashRes, todayRes] = await Promise.all([
-        fetch("/api/dashboard"),
-        fetch("/api/today"),
+        fetch(`/api/dashboard${qs}`),
+        fetch(`/api/today${qs}`),
       ]);
       if (dashRes.ok) setData(await dashRes.json());
       if (todayRes.ok) setTodayData(await todayRes.json());
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isLoydOnly]);
 
   useEffect(() => {
     loadDashboard();

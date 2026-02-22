@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useViewMode } from "@/hooks/use-view-mode";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -65,6 +66,7 @@ const PAGE_SIZES = [10, 25, 50, 100];
 const GENERATIONS = Array.from({ length: 14 }, (_, i) => i + 1);
 
 export default function PeoplePage() {
+  const { isLoydOnly } = useViewMode();
   const [data, setData] = useState<PeopleResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -91,6 +93,12 @@ export default function PeoplePage() {
     setPage(1);
   }, [gender, living, generation, limit]);
 
+  // Reset page and data when mode changes
+  useEffect(() => {
+    setPage(1);
+    setData(null);
+  }, [isLoydOnly]);
+
   const fetchPeople = useCallback(async () => {
     setLoading(true);
     try {
@@ -101,6 +109,7 @@ export default function PeoplePage() {
       if (gender) params.set("gender", gender);
       if (living) params.set("living", "true");
       if (generation) params.set("generation", generation);
+      if (isLoydOnly) params.set("loydOnly", "true");
 
       const res = await fetch(`/api/people?${params}`);
       if (res.ok) {
@@ -109,7 +118,7 @@ export default function PeoplePage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedQuery, page, limit, gender, living, generation]);
+  }, [debouncedQuery, page, limit, gender, living, generation, isLoydOnly]);
 
   useEffect(() => {
     fetchPeople();

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useViewMode } from "@/hooks/use-view-mode";
 import {
   ReactFlow,
   Background,
@@ -75,6 +76,7 @@ interface SearchPerson {
 
 // ─── Page Component ──────────────────────────────────────────────
 export default function MindMapPage() {
+  const { isLoydOnly } = useViewMode();
   const [treeData, setTreeData] = useState<TreeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [rootId, setRootId] = useState<string>("");
@@ -118,6 +120,7 @@ export default function MindMapPage() {
       if (rootId) params.set("root", rootId);
       params.set("depth", "10"); // fetch up to 10 generations locally for client-side expansion
       params.set("lineage", "full");
+      if (isLoydOnly) params.set("loydOnly", "true");
 
       const res = await fetch(`/api/tree?${params}`);
       if (res.ok) {
@@ -132,7 +135,7 @@ export default function MindMapPage() {
     } finally {
       setLoading(false);
     }
-  }, [rootId]);
+  }, [rootId, isLoydOnly]);
 
   useEffect(() => {
     fetchTree();

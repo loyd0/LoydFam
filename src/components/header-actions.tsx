@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/hooks/use-theme";
+import { ViewModeToggle } from "@/components/view-mode-toggle";
 
 /** Search ⌘K button — dispatches a synthetic keyboard event for the command palette. */
 function SearchButton() {
@@ -67,6 +68,7 @@ export function HeaderActions() {
   return (
     <>
       <SearchButton />
+      <ViewModeToggle />
       <ThemeToggle />
     </>
   );

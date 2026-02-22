@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { loydOnlyWhere, parseLoydOnly } from "@/lib/loyd-filter";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -15,10 +16,16 @@ export async function GET(request: NextRequest) {
   const gender = searchParams.get("gender")?.toUpperCase();
   const generation = searchParams.get("generation");
   const living = searchParams.get("living"); // "true" → only people with no death event
+  const loydOnly = parseLoydOnly(searchParams);
   const skip = (page - 1) * limit;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const andClauses: any[] = [{ isPlaceholder: false }];
+
+  // Loyd-only filter
+  if (loydOnly) {
+    andClauses.push(loydOnlyWhere());
+  }
 
   // Text search — name fields
   if (q) {
@@ -104,4 +111,3 @@ export async function GET(request: NextRequest) {
     totalPages: Math.ceil(total / limit),
   });
 }
-

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useViewMode } from "@/hooks/use-view-mode";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,7 @@ function nodeColor(gender: string) {
 }
 
 export default function FanChartPage() {
+  const { isLoydOnly } = useViewMode();
   const [data, setData] = useState<AncestorData | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string>("");
@@ -50,27 +52,29 @@ export default function FanChartPage() {
   const [roots, setRoots] = useState<{ id: string; displayName: string }[]>([]);
   const [hoveredPos, setHoveredPos] = useState<number | null>(null);
 
-  // Load roots list once
+  // Load roots list once (filtered by loydOnly)
   useEffect(() => {
-    fetch("/api/ancestors?personId=__roots_only__&depth=0")
+    const qs = isLoydOnly ? "&loydOnly=true" : "";
+    fetch(`/api/ancestors?personId=__roots_only__&depth=0${qs}`)
       .then((r) => r.json())
       .then((d) => {
         setRoots(d.roots ?? []);
         if (d.roots?.[0]) setSelectedId(d.roots[0].id);
       })
       .finally(() => setRootsLoading(false));
-  }, []);
+  }, [isLoydOnly]);
 
   const fetchAncestors = useCallback(async () => {
     if (!selectedId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/ancestors?personId=${selectedId}&depth=${depth}`);
+      const loydParam = isLoydOnly ? "&loydOnly=true" : "";
+      const res = await fetch(`/api/ancestors?personId=${selectedId}&depth=${depth}${loydParam}`);
       if (res.ok) setData(await res.json());
     } finally {
       setLoading(false);
     }
-  }, [selectedId, depth]);
+  }, [selectedId, depth, isLoydOnly]);
 
   useEffect(() => {
     if (selectedId) fetchAncestors();

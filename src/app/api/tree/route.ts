@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseLoydOnly } from "@/lib/loyd-filter";
 
 // Surnames considered "Loyd lineage" for the direct filter
 const LOYD_SURNAMES = new Set(["LOYD", "LLOYD", "LOYD-DAVIES", "LOYD DAVIES", "CORMACK-LOYD", "LOYD (CHARLTON)"]);
@@ -21,9 +22,11 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const rootId = searchParams.get("root");
   const depth = Math.min(10, Math.max(1, parseInt(searchParams.get("depth") || "4", 10)));
-  // lineage=direct: stop traversal at non-Loyd children (show them as leaf nodes)
-  // lineage=full: show everyone
-  const lineage = searchParams.get("lineage") === "direct" ? "direct" : "full";
+  const loydOnly = parseLoydOnly(searchParams);
+  // loydOnly forces direct lineage; explicit param can still override to "full"
+  const lineage = loydOnly && searchParams.get("lineage") !== "full"
+    ? "direct"
+    : searchParams.get("lineage") === "direct" ? "direct" : "full";
 
   // If no root specified, find the earliest ancestor
   let rootPerson;

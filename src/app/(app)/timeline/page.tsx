@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useViewMode } from "@/hooks/use-view-mode";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -81,6 +82,7 @@ const MAX_YEAR = 2030;
 const DECADE_STEP = 10;
 
 export default function TimelinePage() {
+  const { isLoydOnly } = useViewMode();
   const [data, setData] = useState<TimelineResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -101,13 +103,14 @@ export default function TimelinePage() {
       if (typeFilter) params.set("type", typeFilter);
       if (yearFrom > MIN_YEAR) params.set("yearFrom", String(yearFrom));
       if (yearTo < MAX_YEAR) params.set("yearTo", String(yearTo));
+      if (isLoydOnly) params.set("loydOnly", "true");
 
       const res = await fetch(`/api/timeline?${params}`);
       if (res.ok) setData(await res.json());
     } finally {
       setLoading(false);
     }
-  }, [page, typeFilter, yearFrom, yearTo]);
+  }, [page, typeFilter, yearFrom, yearTo, isLoydOnly]);
 
   useEffect(() => {
     fetchTimeline();

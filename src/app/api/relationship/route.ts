@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { loydOnlyWhere, parseLoydOnly } from "@/lib/loyd-filter";
 
 interface PathNode {
   id: string;
@@ -18,6 +19,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const aId = searchParams.get("a");
   const bId = searchParams.get("b");
+  const loydOnly = parseLoydOnly(searchParams);
 
   if (!aId || !bId) {
     return NextResponse.json({ error: "Missing a or b param" }, { status: 400 });
@@ -36,7 +38,9 @@ export async function GET(request: NextRequest) {
       select: { personAId: true, personBId: true },
     }),
     prisma.person.findMany({
-      where: { isPlaceholder: false },
+      where: loydOnly
+        ? { AND: [{ isPlaceholder: false }, loydOnlyWhere()] }
+        : { isPlaceholder: false },
       select: { id: true, displayName: true, gender: true },
     }),
   ]);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseLoydOnly } from "@/lib/loyd-filter";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -12,6 +13,7 @@ export async function GET(request: NextRequest) {
   const type = searchParams.get("type")?.toUpperCase();
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const limit = Math.min(100, parseInt(searchParams.get("limit") || "50", 10));
+  const loydOnly = parseLoydOnly(searchParams);
   const skip = (page - 1) * limit;
 
   const yearFrom = searchParams.get("yearFrom") ? parseInt(searchParams.get("yearFrom")!, 10) : null;
@@ -26,6 +28,21 @@ export async function GET(request: NextRequest) {
     where.dateYear = {};
     if (yearFrom !== null) where.dateYear.gte = yearFrom;
     if (yearTo !== null) where.dateYear.lte = yearTo;
+  }
+
+  // When loydOnly, restrict to events that involve at least one Loyd-lineage person
+  if (loydOnly) {
+    where.personEvents = {
+      some: {
+        person: {
+          isPlaceholder: false,
+          OR: [
+            { primaryExternalKey: { startsWith: "LOYD:" } },
+            { surname: { in: ["LOYD", "LLOYD", "LOYD-DAVIES", "LOYD DAVIES", "CORMACK-LOYD", "LOYD (CHARLTON)"] } },
+          ],
+        },
+      },
+    };
   }
 
   const [events, total] = await Promise.all([

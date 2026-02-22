@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useViewMode } from "@/hooks/use-view-mode";
 import {
   ReactFlow,
   Background,
@@ -245,14 +246,21 @@ function ProfileCard({
 
 // ─── Main page ────────────────────────────────────────────────
 export default function TreePage() {
+  const { isLoydOnly } = useViewMode();
   const [treeData, setTreeData] = useState<TreeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedRoot, setSelectedRoot] = useState<string>("");
   const [depth, setDepth] = useState(4);
-  const [lineage, setLineage] = useState<"direct" | "full">("full");
+  // Default to 'direct' when loydOnly is active
+  const [lineage, setLineage] = useState<"direct" | "full">("direct");
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selectedPerson, setSelectedPerson] = useState<TreePerson | null>(null);
+
+  // Sync lineage with global mode (only override if user hasn't explicitly set full)
+  useEffect(() => {
+    setLineage(isLoydOnly ? "direct" : "full");
+  }, [isLoydOnly]);
 
   const fetchTree = useCallback(async () => {
     setLoading(true);
@@ -261,6 +269,7 @@ export default function TreePage() {
       if (selectedRoot) params.set("root", selectedRoot);
       params.set("depth", String(depth));
       params.set("lineage", lineage);
+      if (isLoydOnly) params.set("loydOnly", "true");
 
       const res = await fetch(`/api/tree?${params}`);
       if (res.ok) {
@@ -273,7 +282,7 @@ export default function TreePage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedRoot, depth, lineage]);
+  }, [selectedRoot, depth, lineage, isLoydOnly]);
 
   useEffect(() => {
     fetchTree();

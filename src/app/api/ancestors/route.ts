@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { loydOnlyWhere, parseLoydOnly } from "@/lib/loyd-filter";
 
 interface AncestorNode {
   id: string;
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const personId = searchParams.get("personId");
   const depth = Math.min(5, Math.max(1, parseInt(searchParams.get("depth") || "4", 10)));
+  const loydOnly = parseLoydOnly(searchParams);
 
   if (!personId) {
     return NextResponse.json({ error: "Missing personId" }, { status: 400 });
@@ -86,9 +88,12 @@ export async function GET(request: NextRequest) {
     if (mother) queue.push([mother.parentId, ahnNum * 2 + 1, currentDepth + 1]);
   }
 
-  // Also include root lookup for person selector
+  // Also include root lookup for person selector (filtered by loydOnly)
+  const rootsWhere = loydOnly
+    ? { AND: [{ isPlaceholder: false }, loydOnlyWhere()] }
+    : { isPlaceholder: false };
   const roots = await prisma.person.findMany({
-    where: { isPlaceholder: false },
+    where: rootsWhere,
     select: { id: true, displayName: true },
     orderBy: { displayName: "asc" },
     take: 500,

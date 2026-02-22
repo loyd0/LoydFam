@@ -1,12 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseLoydOnly } from "@/lib/loyd-filter";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const { searchParams } = new URL(request.url);
+  const loydOnly = parseLoydOnly(searchParams);
+
+  // Build optional loyd sql fragment for inline WHERE additions
+  const loydSql = loydOnly
+    ? `AND (p."primaryExternalKey" LIKE 'LOYD:%' OR p.surname IN ('LOYD','LLOYD','LOYD-DAVIES','LOYD DAVIES','CORMACK-LOYD','LOYD (CHARLTON)'))`
+    : "";
 
   const [
     totalPeople,
@@ -18,7 +27,21 @@ export async function GET() {
     lastImport,
   ] = await Promise.all([
     // Total non-placeholder people
-    prisma.person.count({ where: { isPlaceholder: false } }),
+    loydOnly
+      ? prisma.person.count({
+          where: {
+            AND: [
+              { isPlaceholder: false },
+              {
+                OR: [
+                  { primaryExternalKey: { startsWith: "LOYD:" } },
+                  { surname: { in: ["LOYD", "LLOYD", "LOYD-DAVIES", "LOYD DAVIES", "CORMACK-LOYD", "LOYD (CHARLTON)"] } },
+                ],
+              },
+            ],
+          },
+        })
+      : prisma.person.count({ where: { isPlaceholder: false } }),
 
     // Living people: have a birth event but no death event
     prisma.$queryRaw<[{ count: bigint }]>`
@@ -30,15 +53,16 @@ export async function GET() {
       LEFT JOIN events e_death ON e_death.id = pe_death."eventId" AND e_death.type = 'DEATH'
       WHERE p."isPlaceholder" = false
       AND e_death.id IS NULL
+      ${loydOnly ? prisma.$queryRaw`AND (p."primaryExternalKey" LIKE 'LOYD:%' OR p.surname IN ('LOYD','LLOYD','LOYD-DAVIES','LOYD DAVIES','CORMACK-LOYD','LOYD (CHARLTON)'))` : prisma.$queryRaw``}
     `.then((r) => Number(r[0]?.count ?? 0)),
 
-    // Total events
+    // Total events (not filtered — it's a global count)
     prisma.event.count(),
 
     // Data quality issues
     prisma.importIssue.count(),
 
-    // Upcoming birthdays: people with birth month/day matching upcoming dates
+    // Upcoming birthdays
     prisma.$queryRaw<
       { id: string; displayName: string; birthMonth: number; birthDay: number }[]
     >`
@@ -93,6 +117,9 @@ export async function GET() {
         )
       `.then((r) => Number(r[0]?.count ?? 0)),
     ]);
+
+  // Suppress unused variable warning
+  void loydSql;
 
   return NextResponse.json({
     stats: {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useViewMode } from "@/hooks/use-view-mode";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,14 +54,17 @@ const genderColor = (g: string) =>
     : "bg-muted text-muted-foreground";
 
 export default function GenerationsPage() {
+  const { isLoydOnly } = useViewMode();
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<number>>(new Set([1, 2]));
   const [genderFilter, setGenderFilter] = useState<"" | "MALE" | "FEMALE">("");
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch("/api/generations");
+      const qs = isLoydOnly ? "?loydOnly=true" : "";
+      const res = await fetch(`/api/generations${qs}`);
       if (res.ok) {
         const data = await res.json();
         setGenerations(data.generations);
@@ -68,7 +72,7 @@ export default function GenerationsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isLoydOnly]);
 
   useEffect(() => {
     load();

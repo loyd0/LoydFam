@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useViewMode } from "@/hooks/use-view-mode";
 import {
   AreaChart,
   Area,
@@ -1224,18 +1225,21 @@ function QualityTab({ data }: { data: StatsData }) {
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 export default function StatsContent() {
+  const { isLoydOnly } = useViewMode();
   const [data, setData] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("population");
 
   const loadStats = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch("/api/stats");
+      const qs = isLoydOnly ? "?loydOnly=true" : "";
+      const res = await fetch(`/api/stats${qs}`);
       if (res.ok) setData(await res.json());
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isLoydOnly]);
 
   useEffect(() => {
     loadStats();

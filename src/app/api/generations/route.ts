@@ -1,15 +1,30 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { loydOnlyWhere, parseLoydOnly } from "@/lib/loyd-filter";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const loydOnly = parseLoydOnly(searchParams);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const where: any = { isPlaceholder: false };
+  if (loydOnly) {
+    where.OR = loydOnlyWhere().OR;
+    // Rearrange to AND with isPlaceholder
+    const loydFilter = loydOnlyWhere();
+    Object.assign(where, { AND: [{ isPlaceholder: false }, loydFilter] });
+    delete where.isPlaceholder;
+    delete where.OR;
+  }
+
   const people = await prisma.person.findMany({
-    where: { isPlaceholder: false },
+    where,
     select: {
       id: true,
       displayName: true,

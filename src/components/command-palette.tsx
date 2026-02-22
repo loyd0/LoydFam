@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useViewMode } from "@/hooks/use-view-mode";
 import {
   User as UserIcon,
   Baby,
@@ -43,6 +44,7 @@ const EVENT_ICONS: Record<string, React.FC<{ className?: string }>> = {
 
 export function CommandPalette() {
   const router = useRouter();
+  const { isLoydOnly } = useViewMode();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResults | null>(null);
@@ -82,12 +84,13 @@ export function CommandPalette() {
     }
     setLoading(true);
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      const loydParam = isLoydOnly ? "&loydOnly=true" : "";
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}${loydParam}`);
       if (res.ok) setResults(await res.json());
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isLoydOnly]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
