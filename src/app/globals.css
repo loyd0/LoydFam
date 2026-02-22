@@ -45,63 +45,149 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+  /* Tree node semantic tokens */
+  --color-node-male: var(--node-male);
+  --color-node-female: var(--node-female);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   LIGHT MODE
+═══════════════════════════════════════════════════════════════ */
 :root {
   --radius: 0.625rem;
 
   /* ── Backgrounds ─────────────────────────────── */
   --background: oklch(0.99 0 0);
-  --foreground: oklch(0.15 0.02 155);
+  --foreground: oklch(0.13 0.025 250);
 
   /* ── Cards ───────────────────────────────────── */
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0.02 155);
+  --card-foreground: oklch(0.13 0.025 250);
 
   /* ── Popovers ────────────────────────────────── */
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.02 155);
+  --popover-foreground: oklch(0.13 0.025 250);
 
-  /* ── Primary: Dark Forest Green ──────────────── */
-  --primary: oklch(0.30 0.07 155);
+  /* ── Primary: Rich Forest Green ──────────────── */
+  --primary: oklch(0.32 0.10 155);
   --primary-foreground: oklch(0.98 0 0);
 
-  /* ── Secondary: Soft green tint ──────────────── */
-  --secondary: oklch(0.96 0.015 155);
-  --secondary-foreground: oklch(0.25 0.06 155);
+  /* ── Secondary: Light green tint ─────────────── */
+  --secondary: oklch(0.94 0.025 155);
+  --secondary-foreground: oklch(0.22 0.08 155);
 
   /* ── Muted ───────────────────────────────────── */
-  --muted: oklch(0.96 0.01 155);
-  --muted-foreground: oklch(0.50 0.03 155);
+  --muted: oklch(0.95 0.008 250);
+  --muted-foreground: oklch(0.48 0.03 250);
 
   /* ── Accent ──────────────────────────────────── */
-  --accent: oklch(0.94 0.025 155);
-  --accent-foreground: oklch(0.25 0.06 155);
+  --accent: oklch(0.92 0.03 155);
+  --accent-foreground: oklch(0.22 0.08 155);
 
   /* ── Destructive ─────────────────────────────── */
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: oklch(0.55 0.22 27);
 
   /* ── Borders / Input / Ring ──────────────────── */
-  --border: oklch(0.90 0.015 155);
-  --input: oklch(0.90 0.015 155);
-  --ring: oklch(0.40 0.06 155);
+  --border: oklch(0.88 0.018 250);
+  --input: oklch(0.88 0.018 250);
+  --ring: oklch(0.38 0.09 155);
 
-  /* ── Charts: Forest palette ──────────────────── */
-  --chart-1: oklch(0.35 0.08 155);
-  --chart-2: oklch(0.50 0.10 155);
-  --chart-3: oklch(0.62 0.12 150);
-  --chart-4: oklch(0.72 0.10 145);
-  --chart-5: oklch(0.82 0.08 140);
+  /* ── Charts: Distinct hues across the spectrum ── */
+  --chart-1: oklch(0.38 0.12 155);
+  /* forest green */
+  --chart-2: oklch(0.58 0.16 185);
+  /* teal */
+  --chart-3: oklch(0.70 0.16 55);
+  /* amber/gold */
+  --chart-4: oklch(0.62 0.18 340);
+  /* rose */
+  --chart-5: oklch(0.50 0.14 265);
+  /* violet */
 
   /* ── Sidebar ─────────────────────────────────── */
-  --sidebar: oklch(0.97 0.01 155);
-  --sidebar-foreground: oklch(0.15 0.02 155);
-  --sidebar-primary: oklch(0.30 0.07 155);
+  --sidebar: oklch(0.97 0.010 155);
+  --sidebar-foreground: oklch(0.13 0.025 250);
+  --sidebar-primary: oklch(0.32 0.10 155);
   --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.93 0.025 155);
-  --sidebar-accent-foreground: oklch(0.25 0.06 155);
-  --sidebar-border: oklch(0.90 0.015 155);
-  --sidebar-ring: oklch(0.40 0.06 155);
+  --sidebar-accent: oklch(0.92 0.03 155);
+  --sidebar-accent-foreground: oklch(0.22 0.08 155);
+  --sidebar-border: oklch(0.88 0.018 250);
+  --sidebar-ring: oklch(0.38 0.09 155);
+
+  /* ── Tree node colours ───────────────────────── */
+  --node-male: oklch(0.32 0.10 155);
+  --node-female: oklch(0.48 0.14 220);
+  --node-male-bg: oklch(0.32 0.10 155 / 0.07);
+  --node-female-bg: oklch(0.48 0.14 220 / 0.07);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DARK MODE
+═══════════════════════════════════════════════════════════════ */
+.dark {
+  /* ── Backgrounds ─────────────────────────────── */
+  --background: oklch(0.13 0.015 250);
+  --foreground: oklch(0.93 0.010 250);
+
+  /* ── Cards ───────────────────────────────────── */
+  --card: oklch(0.17 0.018 250);
+  --card-foreground: oklch(0.93 0.010 250);
+
+  /* ── Popovers ────────────────────────────────── */
+  --popover: oklch(0.17 0.018 250);
+  --popover-foreground: oklch(0.93 0.010 250);
+
+  /* ── Primary: Vivid mid-green (readable on dark) */
+  --primary: oklch(0.65 0.18 155);
+  --primary-foreground: oklch(0.08 0.02 155);
+
+  /* ── Secondary ───────────────────────────────── */
+  --secondary: oklch(0.22 0.04 155);
+  --secondary-foreground: oklch(0.85 0.06 155);
+
+  /* ── Muted ───────────────────────────────────── */
+  --muted: oklch(0.22 0.015 250);
+  --muted-foreground: oklch(0.60 0.020 250);
+
+  /* ── Accent ──────────────────────────────────── */
+  --accent: oklch(0.24 0.045 155);
+  --accent-foreground: oklch(0.85 0.06 155);
+
+  /* ── Destructive ─────────────────────────────── */
+  --destructive: oklch(0.65 0.22 27);
+
+  /* ── Borders / Input / Ring ──────────────────── */
+  --border: oklch(0.28 0.020 250);
+  --input: oklch(0.28 0.020 250);
+  --ring: oklch(0.65 0.18 155);
+
+  /* ── Charts: Same hues, lightened for dark bg ── */
+  --chart-1: oklch(0.68 0.16 155);
+  /* sage green */
+  --chart-2: oklch(0.72 0.16 185);
+  /* sky teal */
+  --chart-3: oklch(0.80 0.16 55);
+  /* golden */
+  --chart-4: oklch(0.72 0.18 340);
+  /* pink/rose */
+  --chart-5: oklch(0.70 0.16 265);
+  /* lavender */
+
+  /* ── Sidebar ─────────────────────────────────── */
+  --sidebar: oklch(0.11 0.012 250);
+  --sidebar-foreground: oklch(0.93 0.010 250);
+  --sidebar-primary: oklch(0.65 0.18 155);
+  --sidebar-primary-foreground: oklch(0.08 0.02 155);
+  --sidebar-accent: oklch(0.24 0.045 155);
+  --sidebar-accent-foreground: oklch(0.85 0.06 155);
+  --sidebar-border: oklch(0.22 0.015 250);
+  --sidebar-ring: oklch(0.65 0.18 155);
+
+  /* ── Tree node colours ───────────────────────── */
+  --node-male: oklch(0.68 0.18 155);
+  --node-female: oklch(0.68 0.18 220);
+  --node-male-bg: oklch(0.68 0.18 155 / 0.12);
+  --node-female-bg: oklch(0.68 0.18 220 / 0.12);
 }
 
 @layer base {
