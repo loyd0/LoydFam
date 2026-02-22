@@ -9,7 +9,7 @@ import type { NextRequest } from "next/server";
  *
  * The actual session validation happens at the page/API level via Auth.js.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const sessionToken =
     request.cookies.get("authjs.session-token") ??
     request.cookies.get("__Secure-authjs.session-token");
