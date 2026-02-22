@@ -152,7 +152,7 @@ export function CommandPalette() {
             }}
             onKeyDown={onKeyDown}
             placeholder="Search people, events…"
-            className="flex-1 bg-transparent text-lg font-serif outline-none placeholder:text-muted-foreground/60 placeholder:font-sans placeholder:italic"
+            className="flex-1 bg-transparent text-base font-medium outline-none placeholder:font-normal placeholder:text-muted-foreground/80"
           />
           {loading && (
             <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary/30 border-t-primary shrink-0" />
@@ -203,10 +203,10 @@ export function CommandPalette() {
                       <UserIcon className="h-5 w-5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-base font-serif leading-tight truncate ${isSelected ? "font-semibold" : "font-medium"}`}>
+                      <p className={`text-sm leading-tight truncate ${isSelected ? "font-semibold text-foreground" : "font-medium text-foreground/80"}`}>
                         {person.displayName}
                       </p>
-                      <p className="font-serif italic text-xs text-muted-foreground mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         {dates}
                         {person.generation != null && ` · Gen ${person.generation}`}
                       </p>
@@ -244,10 +244,10 @@ export function CommandPalette() {
                       <Icon className="h-4 w-4 text-muted-foreground" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-base font-serif leading-tight truncate capitalize ${isSelected ? "font-semibold" : "font-medium"}`}>
+                      <p className={`text-sm leading-tight truncate capitalize ${isSelected ? "font-semibold text-foreground" : "font-medium text-foreground/80"}`}>
                         {event.type.toLowerCase()} — {event.dateYear ?? "Unknown year"}
                       </p>
-                      <p className="font-serif italic text-xs text-muted-foreground mt-0.5 truncate">{names}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{names}</p>
                     </div>
                   </button>
                 );

@@ -1,13 +1,7 @@
 import type { Metadata } from "next";
-import { Playfair_Display, Outfit } from "next/font/google";
+import { Outfit } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
-
-const playfair = Playfair_Display({
-  variable: "--font-serif",
-  subsets: ["latin"],
-  display: "swap",
-});
 
 const outfit = Outfit({
   variable: "--font-sans",
@@ -28,7 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${playfair.variable} ${outfit.variable} font-sans text-base antialiased selection:bg-primary/20 selection:text-primary`}>
+      <body className={`${outfit.variable} font-sans text-base antialiased selection:bg-primary/20 selection:text-primary`}>
         <TooltipProvider delayDuration={300}>{children}</TooltipProvider>
       </body>
     </html>

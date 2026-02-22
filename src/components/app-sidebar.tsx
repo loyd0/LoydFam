@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
@@ -69,8 +70,8 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="px-4 py-5">
         <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/20 transition-colors group-hover:bg-primary/15">
-            <TreePine className="h-5 w-5 text-primary" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/20 transition-colors group-hover:bg-primary/15 relative overflow-hidden">
+            <Image src="/family-crest.svg" alt="Loyd Family Crest" fill className="object-contain p-1.5 dark:invert opacity-90" />
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-semibold leading-none">

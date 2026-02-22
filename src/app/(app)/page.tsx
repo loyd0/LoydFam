@@ -169,8 +169,8 @@ export default function DashboardPage() {
     <div className="space-y-12 animate-page-in">
       {/* Header */}
       <div className="border-b border-border/60 pb-6">
-        <h1 className="font-serif text-5xl font-medium tracking-normal text-primary">Overview</h1>
-        <p className="mt-3 font-serif italic text-lg text-foreground/80">
+        <h1 className="text-4xl font-semibold tracking-tight text-foreground">Overview</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
           The Loyd family history database at a glance.
         </p>
       </div>
@@ -204,7 +204,7 @@ export default function DashboardPage() {
               {loading ? (
                 <Skeleton className="h-7 w-16 mt-1" />
               ) : (
-                <div className="font-serif text-3xl font-medium text-foreground">{s.value}</div>
+                <div className="text-2xl font-semibold text-foreground">{s.value}</div>
               )}
             </div>
           </div>
@@ -220,8 +220,8 @@ export default function DashboardPage() {
                 <l.icon className="h-5 w-5 opacity-80" />
               </div>
               <div className="flex-1">
-                <p className="font-serif text-lg font-medium text-foreground group-hover:text-primary transition-colors">{l.label}</p>
-                <p className="font-serif italic text-xs text-muted-foreground mt-0.5">{l.desc}</p>
+                <p className="text-base font-medium text-foreground group-hover:text-primary transition-colors">{l.label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{l.desc}</p>
               </div>
               <ArrowRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-primary group-hover:translate-x-1 transition-all" />
             </div>

@@ -276,8 +276,8 @@ export default function MindMapPage() {
             {/* Header / Name */}
             <div className="flex items-start gap-4 w-full">
               <div flex-1 min-w-0>
-                <h3 className="font-serif text-lg font-medium truncate leading-tight text-primary">{shortName}</h3>
-                <p className="font-serif italic text-xs text-muted-foreground mt-1">{years}</p>
+                <h3 className="text-base font-semibold truncate text-foreground">{shortName}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">{years}</p>
                 
                 {person.spouseNames.length > 0 && (
                   <p className="text-[11px] uppercase tracking-wider text-muted-foreground mt-2 truncate">
@@ -334,8 +334,8 @@ export default function MindMapPage() {
     <div className="space-y-8 animate-page-in">
       <div className="flex items-center justify-between border-b border-border/60 pb-6">
         <div>
-          <h1 className="font-serif text-4xl font-medium tracking-normal text-primary">Mind Map</h1>
-          <p className="mt-2 text-foreground/80 font-serif italic">
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Mind Map</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Explore the family tree horizontally. Click the +/- buttons to expand branches.
           </p>
         </div>

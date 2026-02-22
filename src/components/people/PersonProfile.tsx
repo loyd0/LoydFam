@@ -285,7 +285,7 @@ export function PersonProfile({
           <UserIcon className="h-7 w-7" />
         </div>
         <div className="flex-1 min-w-0 border-b border-border/60 pb-6">
-          <h2 className={`font-serif font-medium tracking-normal text-primary ${standalone ? "text-4xl" : "text-3xl"}`}>
+          <h2 className={`font-semibold tracking-tight text-foreground ${standalone ? "text-4xl" : "text-3xl"}`}>
             {person.displayName}
           </h2>
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-foreground/80">
@@ -300,12 +300,12 @@ export function PersonProfile({
               <span className="uppercase tracking-widest text-xs font-medium text-muted-foreground border-l border-border pl-4">Gen {generation}</span>
             )}
             {birthEvent && (
-              <span className="font-serif italic text-muted-foreground border-l border-border pl-4">
+              <span className="text-muted-foreground border-l border-border pl-4">
                 b. {formatDate(birthEvent.event)}
               </span>
             )}
             {deathEvent && (
-              <span className="font-serif italic text-muted-foreground border-l border-border pl-4">
+              <span className="text-muted-foreground border-l border-border pl-4">
                 d. {formatDate(deathEvent.event)}
               </span>
             )}
@@ -340,8 +340,8 @@ export function PersonProfile({
       <div className="grid gap-8 md:grid-cols-2">
         {/* Key Facts */}
         <div className="space-y-4">
-          <h3 className="font-serif text-2xl text-primary border-b border-border/40 pb-2 flex items-center gap-2">
-            <UserIcon className="h-5 w-5 opacity-70" />
+          <h3 className="text-2xl font-semibold text-foreground border-b border-border/40 pb-2 flex items-center gap-2">
+            <UserIcon className="h-5 w-5 opacity-70 text-muted-foreground" />
             Key Facts
           </h3>
           <div className="space-y-4 pt-2">
@@ -365,15 +365,15 @@ export function PersonProfile({
               />
             )}
             {!person.surname && !person.givenName1 && !person.knownAs && !person.residencyText && (
-              <p className="font-serif italic text-muted-foreground">No details recorded.</p>
+              <p className="text-muted-foreground">No details recorded.</p>
             )}
           </div>
         </div>
 
         {/* Relationships */}
         <div className="space-y-4">
-          <h3 className="font-serif text-2xl text-primary border-b border-border/40 pb-2 flex items-center gap-2">
-            <Users className="h-5 w-5 opacity-70" />
+          <h3 className="text-2xl font-semibold text-foreground border-b border-border/40 pb-2 flex items-center gap-2">
+            <Users className="h-5 w-5 opacity-70 text-muted-foreground" />
             Relationships
           </h3>
           <div className="space-y-6 pt-2">
@@ -430,7 +430,7 @@ export function PersonProfile({
             {person.parents.length === 0 &&
               person.spouses.length === 0 &&
               person.children.length === 0 && (
-                <p className="font-serif italic text-muted-foreground">
+                <p className="text-muted-foreground">
                   No relationships recorded.
                 </p>
               )}
@@ -439,8 +439,8 @@ export function PersonProfile({
 
         {/* Timeline */}
         <div className="space-y-4">
-          <h3 className="font-serif text-2xl text-primary border-b border-border/40 pb-2 flex items-center gap-2">
-            <Calendar className="h-5 w-5 opacity-70" />
+          <h3 className="text-2xl font-semibold text-foreground border-b border-border/40 pb-2 flex items-center gap-2">
+            <Calendar className="h-5 w-5 opacity-70 text-muted-foreground" />
             Timeline
           </h3>
           <div className="pt-2">
@@ -464,7 +464,7 @@ export function PersonProfile({
                 ))}
               </div>
             ) : (
-              <p className="font-serif italic text-muted-foreground">
+              <p className="text-muted-foreground">
                 No events recorded.
               </p>
             )}
@@ -474,8 +474,8 @@ export function PersonProfile({
         {/* Contact */}
         {person.contact && (
           <div className="space-y-4 border-t border-border/40 pt-6 md:border-none md:pt-0">
-            <h3 className="font-serif text-2xl text-primary border-b border-border/40 pb-2 flex items-center gap-2">
-              <Heart className="h-5 w-5 opacity-70" />
+            <h3 className="text-2xl font-semibold text-foreground border-b border-border/40 pb-2 flex items-center gap-2">
+              <Heart className="h-5 w-5 opacity-70 text-muted-foreground" />
               Contact
             </h3>
             <div className="space-y-4 pt-2">
@@ -510,12 +510,12 @@ export function PersonProfile({
         {/* Biography */}
         {(person.biographyMd || person.biographyShortMd) && (
           <div className="space-y-4 border-t border-border/40 pt-6 md:col-span-2">
-            <h3 className="font-serif text-2xl text-primary border-b border-border/40 pb-2 flex items-center gap-2">
-              <BookOpen className="h-5 w-5 opacity-70" />
+            <h3 className="text-2xl font-semibold text-foreground border-b border-border/40 pb-2 flex items-center gap-2">
+              <BookOpen className="h-5 w-5 opacity-70 text-muted-foreground" />
               Biography
             </h3>
             <div className="pt-2">
-              <p className="font-serif text-lg leading-relaxed whitespace-pre-wrap text-foreground/90">
+              <p className="text-base leading-relaxed whitespace-pre-wrap text-foreground/90">
                 {person.biographyShortMd || person.biographyMd}
               </p>
             </div>
