@@ -137,12 +137,12 @@ export function CommandPalette() {
       }}
     >
       <div
-        className="w-full max-w-xl rounded-2xl border border-border/60 bg-card shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200"
+        className="w-full max-w-xl border-t-4 border-t-primary border-x border-b border-border/60 bg-card shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200"
         style={{ maxHeight: "70vh", display: "flex", flexDirection: "column" }}
       >
         {/* Search bar */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50">
-          <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+        <div className="flex items-center gap-4 px-5 py-4 border-b border-border/40">
+          <Search className="h-5 w-5 text-primary/70 shrink-0" />
           <input
             ref={inputRef}
             value={query}
@@ -152,7 +152,7 @@ export function CommandPalette() {
             }}
             onKeyDown={onKeyDown}
             placeholder="Search people, events…"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="flex-1 bg-transparent text-lg font-serif outline-none placeholder:text-muted-foreground/60 placeholder:font-sans placeholder:italic"
           />
           {loading && (
             <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary/30 border-t-primary shrink-0" />
@@ -193,25 +193,25 @@ export function CommandPalette() {
                     key={person.id}
                     onClick={() => navigate({ type: "person", data: person })}
                     onMouseEnter={() => setSelected(i)}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
-                      isSelected ? "bg-primary/8 text-foreground" : "hover:bg-muted/50"
+                    className={`flex w-full items-center gap-4 px-3 py-3 text-left transition-all ${
+                      isSelected ? "bg-primary/5 text-primary border-l-2 border-primary" : "border-l-2 border-transparent hover:bg-muted/30"
                     }`}
                   >
                     <div
-                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${genderColor(person.gender)}`}
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-none border border-border/40 text-xs font-bold ${genderColor(person.gender)}`}
                     >
-                      <UserIcon className="h-4 w-4" />
+                      <UserIcon className="h-5 w-5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium leading-tight truncate">
+                      <p className={`text-base font-serif leading-tight truncate ${isSelected ? "font-semibold" : "font-medium"}`}>
                         {person.displayName}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="font-serif italic text-xs text-muted-foreground mt-0.5">
                         {dates}
                         {person.generation != null && ` · Gen ${person.generation}`}
                       </p>
                     </div>
-                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <ArrowRight className={`h-4 w-4 shrink-0 transition-opacity ${isSelected ? "opacity-100 text-primary" : "opacity-0"}`} />
                   </button>
                 );
               })}
@@ -236,18 +236,18 @@ export function CommandPalette() {
                       setOpen(false);
                     }}
                     onMouseEnter={() => setSelected(globalIdx)}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
-                      isSelected ? "bg-primary/8 text-foreground" : "hover:bg-muted/50"
+                    className={`flex w-full items-center gap-4 px-3 py-3 text-left transition-all ${
+                      isSelected ? "bg-primary/5 text-primary border-l-2 border-primary" : "border-l-2 border-transparent hover:bg-muted/30"
                     }`}
                   >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-none border border-border/40 bg-muted/30">
                       <Icon className="h-4 w-4 text-muted-foreground" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium leading-tight truncate capitalize">
+                      <p className={`text-base font-serif leading-tight truncate capitalize ${isSelected ? "font-semibold" : "font-medium"}`}>
                         {event.type.toLowerCase()} — {event.dateYear ?? "Unknown year"}
                       </p>
-                      <p className="text-xs text-muted-foreground truncate">{names}</p>
+                      <p className="font-serif italic text-xs text-muted-foreground mt-0.5 truncate">{names}</p>
                     </div>
                   </button>
                 );

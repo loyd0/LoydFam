@@ -166,12 +166,12 @@ export default function DashboardPage() {
       ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-12 animate-page-in">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-muted-foreground">
-          Overview of the Loyd family history database.
+      <div className="border-b border-border/60 pb-6">
+        <h1 className="font-serif text-5xl font-medium tracking-normal text-primary">Overview</h1>
+        <p className="mt-3 font-serif italic text-lg text-foreground/80">
+          The Loyd family history database at a glance.
         </p>
       </div>
 
@@ -187,46 +187,44 @@ export default function DashboardPage() {
       </form>
 
       {/* Stats tiles */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s, idx) => (
-          <Card
+          <div
             key={s.label}
-            className="border-border/50 bg-card/80 backdrop-blur animate-in fade-in slide-in-from-bottom-2"
+            className="border-l-2 border-primary/20 bg-background pl-4 py-2 animate-in fade-in slide-in-from-bottom-2 hover:border-primary transition-colors duration-300"
             style={{ animationDelay: `${idx * 60}ms`, animationFillMode: "both" }}
           >
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardDescription className="text-xs font-medium uppercase tracking-wider">
-                {s.label}
-              </CardDescription>
+            <div className="flex items-center gap-2 mb-2">
               <s.icon className={`h-4 w-4 ${s.colour}`} />
-            </CardHeader>
-            <CardContent>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                {s.label}
+              </p>
+            </div>
+            <div>
               {loading ? (
-                <Skeleton className="h-7 w-16" />
+                <Skeleton className="h-7 w-16 mt-1" />
               ) : (
-                <div className="text-2xl font-bold">{s.value}</div>
+                <div className="font-serif text-3xl font-medium text-foreground">{s.value}</div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         ))}
       </div>
 
       {/* Quick links to new features */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3 pt-4 border-t border-border/40">
         {quickLinks.map((l) => (
           <Link key={l.href} href={l.href}>
-            <Card className="border-border/50 bg-card/80 backdrop-blur hover:bg-card hover:shadow-sm transition-all duration-200 group cursor-pointer h-full">
-              <CardContent className="flex items-center gap-3 pt-4 pb-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:bg-primary/15 transition-colors">
-                  <l.icon className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">{l.label}</p>
-                  <p className="text-xs text-muted-foreground">{l.desc}</p>
-                </div>
-                <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground/40 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-              </CardContent>
-            </Card>
+            <div className="flex items-center gap-4 p-4 border border-border/50 bg-card hover:bg-muted/20 hover:border-primary/40 transition-all duration-300 group cursor-pointer h-full shadow-sm">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-primary/5 text-primary border border-primary/10 transition-colors">
+                <l.icon className="h-5 w-5 opacity-80" />
+              </div>
+              <div className="flex-1">
+                <p className="font-serif text-lg font-medium text-foreground group-hover:text-primary transition-colors">{l.label}</p>
+                <p className="font-serif italic text-xs text-muted-foreground mt-0.5">{l.desc}</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-primary group-hover:translate-x-1 transition-all" />
+            </div>
           </Link>
         ))}
       </div>
