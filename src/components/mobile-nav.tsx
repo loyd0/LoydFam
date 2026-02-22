@@ -8,13 +8,14 @@ import {
   TreePine,
   Clock,
   BarChart3,
+  Network,
 } from "lucide-react";
 
 const tabs = [
   { title: "Home", href: "/", icon: LayoutDashboard },
   { title: "People", href: "/people", icon: Users },
   { title: "Tree", href: "/tree", icon: TreePine },
-  { title: "Timeline", href: "/timeline", icon: Clock },
+  { title: "Map", href: "/mindmap", icon: Network },
   { title: "Stats", href: "/stats", icon: BarChart3 },
 ];
 

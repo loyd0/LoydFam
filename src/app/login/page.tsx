@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,22 +13,38 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { TreePine, Mail, CheckCircle2, Loader2 } from "lucide-react";
+import { TreePine, Mail, Lock, Loader2, AlertCircle } from "lucide-react";
 
 function LoginForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const isVerify = searchParams.get("verify") === "1";
+  const callbackUrl = searchParams.get("callbackUrl") || "/";
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(isVerify);
+  const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email) return;
+    if (!email || !password) return;
     setLoading(true);
+    setError("");
+
     try {
-      await signIn("resend", { email, redirect: false });
-      setSent(true);
+      const res = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (res?.error) {
+        setError("Invalid email or password.");
+      } else {
+        router.push(callbackUrl);
+        router.refresh();
+      }
+    } catch {
+      setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -37,62 +53,63 @@ function LoginForm() {
   return (
     <Card className="border-border/50 bg-card/80 backdrop-blur-xl">
       <CardHeader className="pb-4">
-        <CardTitle className="text-lg">
-          {sent ? "Check your email" : "Sign in"}
-        </CardTitle>
+        <CardTitle className="text-lg">Sign in</CardTitle>
         <CardDescription>
-          {sent
-            ? "We've sent you a magic link. Click the link in your email to sign in."
-            : "Enter your email to receive a magic link."}
+          Enter your email and password to continue.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {sent ? (
-          <div className="flex flex-col items-center gap-4 py-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10">
-              <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="email">Email address</Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="pl-10"
+                required
+                autoFocus
+              />
             </div>
-            <p className="text-center text-sm text-muted-foreground">
-              Didn&apos;t receive an email?{" "}
-              <button
-                type="button"
-                onClick={() => setSent(false)}
-                className="font-medium text-primary underline-offset-4 hover:underline"
-              >
-                Try again
-              </button>
-            </p>
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email address</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10"
-                  required
-                  autoFocus
-                />
-              </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="pl-10"
+                required
+              />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending link…
-                </>
-              ) : (
-                "Send magic link"
-              )}
-            </Button>
-          </form>
-        )}
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4" />
+              {error}
+            </div>
+          )}
+
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Signing in…
+              </>
+            ) : (
+              "Sign in"
+            )}
+          </Button>
+        </form>
       </CardContent>
     </Card>
   );
@@ -116,7 +133,7 @@ export default function LoginPage() {
               Loyd Family History
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Sign in with your email to explore the family tree
+              Sign in to explore the family tree
             </p>
           </div>
         </div>
@@ -133,7 +150,7 @@ export default function LoginPage() {
         </Suspense>
 
         <p className="mt-6 text-center text-xs text-muted-foreground/60">
-          Invite-only access. Contact an admin if you need an invitation.
+          Invite-only access. Contact an admin if you need an account.
         </p>
       </div>
     </div>

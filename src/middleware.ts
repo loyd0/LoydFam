@@ -10,11 +10,6 @@ import type { NextRequest } from "next/server";
  * The actual session validation happens at the page/API level via Auth.js.
  */
 export function middleware(request: NextRequest) {
-  // DEV BYPASS — skip auth redirect in development
-  if (process.env.NODE_ENV === "development") {
-    return NextResponse.next();
-  }
-
   const sessionToken =
     request.cookies.get("authjs.session-token") ??
     request.cookies.get("__Secure-authjs.session-token");

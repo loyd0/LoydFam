@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import {
   Sidebar,
   SidebarContent,
@@ -29,12 +29,15 @@ import {
   GitMerge,
   Layers,
   PieChart,
+  Network,
+  UserCog,
 } from "lucide-react";
 
 const mainNav = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard },
   { title: "People", href: "/people", icon: Users },
   { title: "Family Tree", href: "/tree", icon: TreePine },
+  { title: "Mind Map", href: "/mindmap", icon: Network },
   { title: "Timeline", href: "/timeline", icon: Clock },
   { title: "Stats", href: "/stats", icon: BarChart3 },
   { title: "Generations", href: "/generations", icon: Layers },
@@ -42,14 +45,20 @@ const mainNav = [
   { title: "Relationship", href: "/relationship", icon: GitMerge },
 ];
 
+const accountNav = [
+  { title: "Settings", href: "/settings", icon: UserCog },
+];
+
 const adminNav = [
   { title: "Imports", href: "/admin/imports", icon: Upload },
   { title: "Data Quality", href: "/admin/data-quality", icon: ShieldAlert },
-  { title: "Settings", href: "/admin/settings", icon: Settings },
+  { title: "User Management", href: "/admin/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
@@ -95,10 +104,10 @@ export function AppSidebar() {
         <SidebarSeparator />
 
         <SidebarGroup>
-          <SidebarGroupLabel>Admin</SidebarGroupLabel>
+          <SidebarGroupLabel>Account</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {adminNav.map((item) => (
+              {accountNav.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton asChild isActive={isActive(item.href)}>
                     <Link href={item.href}>
@@ -111,6 +120,29 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {isAdmin && (
+          <>
+            <SidebarSeparator />
+            <SidebarGroup>
+              <SidebarGroupLabel>Admin</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {adminNav.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton asChild isActive={isActive(item.href)}>
+                        <Link href={item.href}>
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="p-2">
@@ -129,3 +161,4 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
+
