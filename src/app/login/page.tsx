@@ -111,7 +111,7 @@ export default function LoginPage() {
         {/* Mobile header: logo above form */}
         <div className="flex items-center gap-3 px-8 pt-8 lg:hidden">
           <Image
-            src="/family-crest.png"
+            src="/family-crest.svg"
             alt="Loyd Family Crest"
             width={40}
             height={40}
@@ -164,7 +164,7 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col items-center gap-8 px-12 text-center">
           <Image
-            src="/family-crest.png"
+            src="/family-crest.svg"
             alt="Loyd Family Crest"
             width={380}
             height={380}
