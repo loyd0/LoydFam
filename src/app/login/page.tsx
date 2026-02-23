@@ -47,7 +47,7 @@ function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4 pt-4">
       <div className="space-y-2">
-        <Label htmlFor="email" className="font-sans text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Email address
         </Label>
         <Input
@@ -56,13 +56,13 @@ function LoginForm() {
           placeholder="name@example.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="font-sans text-sm focus-visible:ring-primary h-11"
+          className="text-sm focus-visible:ring-primary h-11"
           required
           autoFocus
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="password" className="font-sans text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <Label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Password
         </Label>
         <Input
@@ -71,22 +71,22 @@ function LoginForm() {
           placeholder="••••••••"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="font-sans text-sm focus-visible:ring-primary h-11"
+          className="text-sm focus-visible:ring-primary h-11"
           required
         />
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-sm font-sans animate-in fade-in bg-destructive/10 text-destructive p-3 rounded-md">
+        <div className="flex items-center gap-2 text-sm animate-in fade-in bg-destructive/10 text-destructive p-3 rounded-md">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
-      <Button 
-        type="submit" 
+      <Button
+        type="submit"
         disabled={loading}
-        className="w-full h-11 mt-4 font-sans font-medium text-sm transition-all"
+        className="w-full h-11 mt-4 font-medium text-sm transition-all"
       >
         {loading ? (
           <div className="flex items-center gap-2">
@@ -103,47 +103,85 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4 sm:p-8">
-      <div className="w-full max-w-md space-y-8">
-        
-        {/* Header Section */}
-        <div className="flex flex-col items-center justify-center space-y-4 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20 relative overflow-hidden">
-            <Image 
-              src="/family-crest.svg" 
-              alt="Loyd Crest" 
-              fill 
-              className="object-contain p-2 dark:invert" 
-            />
-          </div>
-          <div className="space-y-2">
-            <h1 className="font-sans text-2xl font-semibold tracking-tight text-foreground">
-              Loyd Family
-            </h1>
-            <p className="font-sans text-sm text-muted-foreground">
-              Sign in to your account
+    <div className="flex min-h-screen bg-background">
+
+      {/* ── Left column: form ─────────────────────────────────── */}
+      <div className="flex w-full flex-col lg:w-1/2">
+
+        {/* Mobile header: logo above form */}
+        <div className="flex items-center gap-3 px-8 pt-8 lg:hidden">
+          <Image
+            src="/family-crest.png"
+            alt="Loyd Family Crest"
+            width={40}
+            height={40}
+            className="object-contain"
+            priority
+          />
+          <span className="text-lg font-semibold tracking-tight text-foreground">Loyd Family</span>
+        </div>
+
+        {/* Centred form area */}
+        <div className="flex flex-1 items-center justify-center px-6 py-12 sm:px-12">
+          <div className="w-full max-w-sm space-y-8">
+
+            {/* Desktop heading (logo hidden on mobile - shown in top bar instead) */}
+            <div className="hidden lg:block space-y-1">
+              <h1 className="text-3xl font-semibold tracking-tight text-foreground">Welcome back</h1>
+              <p className="text-sm text-muted-foreground">Sign in to access the Loyd Family archive.</p>
+            </div>
+
+            {/* Mobile heading */}
+            <div className="lg:hidden space-y-1 pt-6">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">Sign in</h1>
+              <p className="text-sm text-muted-foreground">Access the Loyd Family archive.</p>
+            </div>
+
+            {/* Form card */}
+            <div className="bg-card border border-border shadow-sm rounded-xl p-6 sm:p-8">
+              <Suspense fallback={
+                <div className="w-full space-y-4 animate-pulse">
+                  <div className="h-10 bg-muted/30 rounded w-full" />
+                  <div className="h-10 bg-muted/30 rounded w-full" />
+                  <div className="h-10 bg-primary/20 rounded w-full" />
+                </div>
+              }>
+                <LoginForm />
+              </Suspense>
+            </div>
+
+            <p className="text-center text-xs text-muted-foreground">
+              © {new Date().getFullYear()} Loyd Family History. Invite-only access.
             </p>
           </div>
         </div>
+      </div>
 
-        {/* Login Form Container */}
-        <div className="bg-card border border-border shadow-sm rounded-xl p-6 sm:p-8">
-          <Suspense fallback={
-            <div className="w-full space-y-4 animate-pulse">
-              <div className="h-10 bg-muted/30 rounded w-full"></div>
-              <div className="h-10 bg-muted/30 rounded w-full"></div>
-              <div className="h-10 bg-primary/20 rounded w-full"></div>
-            </div>
-          }>
-            <LoginForm />
-          </Suspense>
-        </div>
+      {/* ── Right column: crest hero (desktop only) ───────────── */}
+      <div className="hidden lg:flex lg:w-1/2 flex-col items-center justify-center bg-primary relative overflow-hidden">
+        {/* Subtle radial glow */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.08)_0%,transparent_70%)]" />
 
-        {/* Footer */}
-        <div className="text-center font-sans text-xs text-muted-foreground">
-          <p>© {new Date().getFullYear()} Loyd Family History. Invite-only access.</p>
+        <div className="relative z-10 flex flex-col items-center gap-8 px-12 text-center">
+          <Image
+            src="/family-crest.png"
+            alt="Loyd Family Crest"
+            width={380}
+            height={380}
+            className="object-contain drop-shadow-2xl"
+            priority
+          />
+          <div className="space-y-2">
+            <h2 className="text-2xl font-semibold text-primary-foreground tracking-tight">
+              Loyd Family History
+            </h2>
+            <p className="text-sm text-primary-foreground/70 max-w-xs">
+              Preserving our story across generations.
+            </p>
+          </div>
         </div>
       </div>
+
     </div>
   );
 }
