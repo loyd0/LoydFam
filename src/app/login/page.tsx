@@ -105,36 +105,30 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen bg-background">
 
-      {/* ── Left column: form ─────────────────────────────────── */}
+      {/* ── Left / single column: form ────────────────────────── */}
       <div className="flex w-full flex-col lg:w-1/2">
-
-        {/* Mobile header: logo above form */}
-        <div className="flex items-center gap-3 px-8 pt-8 lg:hidden">
-          <Image
-            src="/family-crest.svg"
-            alt="Loyd Family Crest"
-            width={40}
-            height={40}
-            className="object-contain"
-            priority
-          />
-          <span className="text-lg font-semibold tracking-tight text-foreground">Loyd Family</span>
-        </div>
-
-        {/* Centred form area */}
         <div className="flex flex-1 items-center justify-center px-6 py-12 sm:px-12">
-          <div className="w-full max-w-sm space-y-8">
+          <div className="w-full max-w-sm space-y-6">
 
-            {/* Desktop heading (logo hidden on mobile - shown in top bar instead) */}
+            {/* Mobile: crest above the form */}
+            <div className="flex flex-col items-center gap-3 lg:hidden">
+              <Image
+                src="/family-crest.svg"
+                alt="Loyd Family Crest"
+                width={120}
+                height={120}
+                className="object-contain"
+                unoptimized
+                priority
+              />
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">Sign in</h1>
+              <p className="text-sm text-muted-foreground">Access the Loyd Family archive.</p>
+            </div>
+
+            {/* Desktop: text heading only (crest is on the right panel) */}
             <div className="hidden lg:block space-y-1">
               <h1 className="text-3xl font-semibold tracking-tight text-foreground">Welcome back</h1>
               <p className="text-sm text-muted-foreground">Sign in to access the Loyd Family archive.</p>
-            </div>
-
-            {/* Mobile heading */}
-            <div className="lg:hidden space-y-1 pt-6">
-              <h1 className="text-2xl font-semibold tracking-tight text-foreground">Sign in</h1>
-              <p className="text-sm text-muted-foreground">Access the Loyd Family archive.</p>
             </div>
 
             {/* Form card */}
@@ -159,9 +153,7 @@ export default function LoginPage() {
 
       {/* ── Right column: crest hero (desktop only) ───────────── */}
       <div className="hidden lg:flex lg:w-1/2 flex-col items-center justify-center bg-primary relative overflow-hidden">
-        {/* Subtle radial glow */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.08)_0%,transparent_70%)]" />
-
         <div className="relative z-10 flex flex-col items-center gap-8 px-12 text-center">
           <Image
             src="/family-crest.svg"
@@ -169,6 +161,7 @@ export default function LoginPage() {
             width={380}
             height={380}
             className="object-contain drop-shadow-2xl"
+            unoptimized
             priority
           />
           <div className="space-y-2">
