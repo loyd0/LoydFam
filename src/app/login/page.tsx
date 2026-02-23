@@ -3,7 +3,6 @@
 import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -112,14 +111,13 @@ export default function LoginPage() {
 
             {/* Mobile: crest above the form */}
             <div className="flex flex-col items-center gap-3 lg:hidden">
-              <Image
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src="/family-crest.svg"
                 alt="Loyd Family Crest"
                 width={120}
                 height={120}
                 className="object-contain"
-                unoptimized
-                priority
               />
               <h1 className="text-2xl font-semibold tracking-tight text-foreground">Sign in</h1>
               <p className="text-sm text-muted-foreground">Access the Loyd Family archive.</p>
@@ -155,14 +153,13 @@ export default function LoginPage() {
       <div className="hidden lg:flex lg:w-1/2 flex-col items-center justify-center bg-primary relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.08)_0%,transparent_70%)]" />
         <div className="relative z-10 flex flex-col items-center gap-8 px-12 text-center">
-          <Image
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src="/family-crest.svg"
             alt="Loyd Family Crest"
             width={380}
             height={380}
             className="object-contain drop-shadow-2xl"
-            unoptimized
-            priority
           />
           <div className="space-y-2">
             <h2 className="text-2xl font-semibold text-primary-foreground tracking-tight">
