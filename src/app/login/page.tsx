@@ -160,6 +160,7 @@ export default function LoginPage() {
             width={380}
             height={380}
             className="object-contain drop-shadow-2xl"
+            style={{ filter: "brightness(0) invert(1)" }}
           />
           <div className="space-y-2">
             <h2 className="text-2xl font-semibold text-primary-foreground tracking-tight">
