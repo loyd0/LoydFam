@@ -30,8 +30,9 @@ export const config = {
      * - login page
      * - _next/static (static files)
      * - _next/image (image optimisation)
+     * - Public static files (svg, png, jpg, webp, ico, woff, etc.)
      * - favicon.ico, sitemap.xml, robots.txt
      */
-    "/((?!api/auth|login|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
+    "/((?!api/auth|login|_next/static|_next/image|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf|mp4|webm)$|favicon\\.ico|sitemap\\.xml|robots\\.txt).*)",
   ],
 };
