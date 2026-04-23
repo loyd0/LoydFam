@@ -26,7 +26,10 @@ import {
   Copy,
   Trash2,
   Shield,
+  Send,
+  Link as LinkIcon,
 } from "lucide-react";
+import { createInvite } from "@/app/(app)/admin/actions";
 
 interface UserRecord {
   id: string;
@@ -59,6 +62,9 @@ export default function AdminSettingsPage() {
     success: boolean;
     message: string;
     tempPassword?: string;
+    acceptUrl?: string;
+    emailSent?: boolean;
+    emailFallback?: string;
   } | null>(null);
 
   // Redirect non-admins
@@ -92,34 +98,29 @@ export default function AdminSettingsPage() {
     setInviteResult(null);
 
     try {
-      const res = await fetch("/api/admin/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: inviteEmail,
-          name: inviteName,
-          role: inviteRole,
-        }),
+      const result = await createInvite({
+        email: inviteEmail,
+        name: inviteName || null,
+        role: inviteRole as "ADMIN" | "VIEWER",
       });
-      const data = await res.json();
-      if (res.ok) {
-        setInviteResult({
-          success: true,
-          message: `Created user ${inviteEmail}`,
-          tempPassword: data.tempPassword,
-        });
-        setInviteEmail("");
-        setInviteName("");
-        setInviteRole("VIEWER");
-        loadData();
-      } else {
-        setInviteResult({
-          success: false,
-          message: data.error || "Failed to invite",
-        });
-      }
-    } catch {
-      setInviteResult({ success: false, message: "Network error" });
+      setInviteResult({
+        success: true,
+        message: result.emailSent
+          ? `Invite email sent to ${result.email}`
+          : `Invite created for ${result.email} — copy the link below and share it`,
+        acceptUrl: result.acceptUrl,
+        emailSent: result.emailSent,
+        emailFallback: result.emailFallback,
+      });
+      setInviteEmail("");
+      setInviteName("");
+      setInviteRole("VIEWER");
+      loadData();
+    } catch (err) {
+      setInviteResult({
+        success: false,
+        message: err instanceof Error ? err.message : "Failed to invite",
+      });
     } finally {
       setInviting(false);
     }
@@ -163,11 +164,11 @@ export default function AdminSettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <UserPlus className="h-4 w-4 text-chart-1" />
-            Create User
+            Invite User
           </CardTitle>
           <CardDescription>
-            Create a new account with a temporary password. Share the password
-            with the user so they can sign in and change it.
+            Send an invitation email with a secure sign-up link. If email delivery isn&rsquo;t
+            configured, you&rsquo;ll be shown the link to share manually.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -216,10 +217,13 @@ export default function AdminSettingsPage() {
                 {inviting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating…
+                    Sending…
                   </>
                 ) : (
-                  "Create User"
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    Send invite
+                  </>
                 )}
               </Button>
             </div>
@@ -239,6 +243,35 @@ export default function AdminSettingsPage() {
                 )}
                 {inviteResult.message}
               </div>
+              {inviteResult.acceptUrl && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                  <LinkIcon className="mt-0.5 h-4 w-4 text-amber-700 dark:text-amber-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                      {inviteResult.emailSent ? "Fallback link (also emailed)" : "Invite link — share this with the user"}
+                    </p>
+                    <code className="mt-1 block break-all text-xs font-mono text-foreground/90">
+                      {inviteResult.acceptUrl}
+                    </code>
+                    {inviteResult.emailFallback && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {inviteResult.emailFallback}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (inviteResult.acceptUrl) {
+                        navigator.clipboard.writeText(inviteResult.acceptUrl);
+                      }
+                    }}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
               {inviteResult.tempPassword && (
                 <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
                   <div className="flex-1">
@@ -254,7 +287,7 @@ export default function AdminSettingsPage() {
                     size="sm"
                     onClick={() => {
                       navigator.clipboard.writeText(
-                        inviteResult.tempPassword!
+                        inviteResult.tempPassword!,
                       );
                     }}
                   >
