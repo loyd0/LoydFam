@@ -27,11 +27,11 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts    Account[]
-  sessions    Session[]
-  notes       Note[]
-  savedViews  SavedView[]
-  activities  Activity[]  @relation("actor")
+  accounts     Account[]
+  sessions     Session[]
+  notes        Note[]
+  savedViews   SavedView[]
+  activities   Activity[]  @relation("actor")
   mediaUploads Media[]
 
   @@map("users")
@@ -80,13 +80,28 @@ model VerificationToken {
 model Invite {
   id        String       @id @default(cuid())
   email     String       @unique
+  name      String?
   role      UserRole     @default(VIEWER)
   status    InviteStatus @default(PENDING)
+  token     String?      @unique
+  expiresAt DateTime?
   invitedBy String?
   createdAt DateTime     @default(now())
   usedAt    DateTime?
 
   @@map("invites")
+}
+
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([token])
+  @@map("password_resets")
 }
 
 enum UserRole {
@@ -153,18 +168,18 @@ model ImportRow {
   rowHash       String?
   isBlank       Boolean @default(false)
 
-  importSheet ImportSheet      @relation(fields: [importSheetId], references: [id])
+  importSheet ImportSheet        @relation(fields: [importSheetId], references: [id])
   entityLinks ImportEntityLink[]
 
   @@map("import_rows")
 }
 
 model ImportEntityLink {
-  id         String             @id @default(uuid())
+  id          String           @id @default(uuid())
   importRowId String
-  entityType ImportEntityType
-  entityId   String
-  reason     String?
+  entityType  ImportEntityType
+  entityId    String
+  reason      String?
 
   importRow ImportRow @relation(fields: [importRowId], references: [id])
 
@@ -217,15 +232,15 @@ enum ImportIssueSeverity {
 // ─────────────────────────────────────────────────────────────
 
 model Person {
-  id                    String  @id @default(uuid())
+  id                    String   @id @default(uuid())
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
-  isPlaceholder         Boolean @default(false)
-  primaryExternalKey    String  @unique
+  isPlaceholder         Boolean  @default(false)
+  primaryExternalKey    String   @unique
   sourceSystem          String?
   externalId            String?
   branchRootExternalId  String?
-  gender                Gender  @default(UNKNOWN)
+  gender                Gender   @default(UNKNOWN)
   surname               String?
   givenName1            String?
   givenName2            String?
@@ -236,9 +251,9 @@ model Person {
   displayName           String
   dspFlag               Boolean?
   residencyText         String?
-  biographyMd           String? @db.Text
-  biographyShortMd      String? @db.Text
-  notesMd               String? @db.Text
+  biographyMd           String?  @db.Text
+  biographyShortMd      String?  @db.Text
+  notesMd               String?  @db.Text
   expectedPhotoCount    Int?
   legacyGeneration      Int?
   generationFromWilliam Int?
@@ -247,17 +262,17 @@ model Person {
   rawNameString         String?
 
   // Relations
-  aliases           PersonAlias[]
-  events            PersonEvent[]
-  parentRelations   ParentChild[]  @relation("child")
-  childRelations    ParentChild[]  @relation("parent")
-  partnershipsA     Partnership[]  @relation("partnerA")
-  partnershipsB     Partnership[]  @relation("partnerB")
-  mediaLinks        MediaLink[]    @relation("personMedia")
-  notes             Note[]         @relation("personNotes")
-  tagLinks          TagLink[]      @relation("personTags")
-  contact           Contact?
-  personPlaces      PersonPlace[]
+  aliases         PersonAlias[]
+  events          PersonEvent[]
+  parentRelations ParentChild[] @relation("child")
+  childRelations  ParentChild[] @relation("parent")
+  partnershipsA   Partnership[] @relation("partnerA")
+  partnershipsB   Partnership[] @relation("partnerB")
+  mediaLinks      MediaLink[]   @relation("personMedia")
+  notes           Note[]        @relation("personNotes")
+  tagLinks        TagLink[]     @relation("personTags")
+  contact         Contact?
+  personPlaces    PersonPlace[]
 
   @@index([displayName(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([surname(ops: raw("gin_trgm_ops"))], type: Gin)
@@ -278,12 +293,12 @@ model PersonAlias {
 }
 
 model EntityAttribute {
-  id              String              @id @default(uuid())
-  entityType      EntityAttributeType
-  entityId        String
-  key             String
-  valueText       String?
-  valueJson       Json?
+  id                String              @id @default(uuid())
+  entityType        EntityAttributeType
+  entityId          String
+  key               String
+  valueText         String?
+  valueJson         Json?
   sourceImportRowId String?
 
   @@index([entityType, entityId])
@@ -323,7 +338,7 @@ model Event {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  place        Place?       @relation(fields: [placeId], references: [id])
+  place        Place?        @relation(fields: [placeId], references: [id])
   personEvents PersonEvent[]
 
   // Marriage events linked from partnerships
@@ -359,11 +374,11 @@ enum EventType {
 // ─────────────────────────────────────────────────────────────
 
 model ParentChild {
-  id       String              @id @default(uuid())
+  id       String          @id @default(uuid())
   parentId String
   childId  String
-  type     ParentChildType     @default(UNKNOWN)
-  notesMd  String?             @db.Text
+  type     ParentChildType @default(UNKNOWN)
+  notesMd  String?         @db.Text
 
   parent Person @relation("parent", fields: [parentId], references: [id], onDelete: Cascade)
   child  Person @relation("child", fields: [childId], references: [id], onDelete: Cascade)
@@ -422,7 +437,7 @@ model Media {
   createdByUserId String?
   createdAt       DateTime  @default(now())
 
-  createdBy  User?      @relation(fields: [createdByUserId], references: [id])
+  createdBy  User?       @relation(fields: [createdByUserId], references: [id])
   mediaLinks MediaLink[]
 
   @@map("media")
@@ -436,7 +451,7 @@ model MediaLink {
   isPrimary  Boolean         @default(false)
   sortOrder  Int             @default(0)
 
-  media  Media  @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  media  Media   @relation(fields: [mediaId], references: [id], onDelete: Cascade)
   person Person? @relation("personMedia", fields: [entityId], references: [id], map: "media_links_person_fk")
 
   @@map("media_links")
@@ -497,7 +512,7 @@ model Tag {
 }
 
 model TagLink {
-  id         String         @id @default(uuid())
+  id         String        @id @default(uuid())
   tagId      String
   entityType TagLinkEntity
   entityId   String
@@ -542,17 +557,17 @@ enum SavedViewScope {
 // ─────────────────────────────────────────────────────────────
 
 model Contact {
-  id                   String   @id @default(uuid())
-  personId             String   @unique
-  emails               String[]
-  mobile               String?
-  landline             String?
-  address2000          String?
-  postalAddress2021    String?
-  establishingContact  String?
-  comments             String?
-  ageCurrentExcel      Int?
-  numberOfKids2000     Int?
+  id                  String   @id @default(uuid())
+  personId            String   @unique
+  emails              String[]
+  mobile              String?
+  landline            String?
+  address2000         String?
+  postalAddress2021   String?
+  establishingContact String?
+  comments            String?
+  ageCurrentExcel     Int?
+  numberOfKids2000    Int?
 
   person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
 
@@ -564,14 +579,14 @@ model Contact {
 // ─────────────────────────────────────────────────────────────
 
 model Activity {
-  id            String       @id @default(uuid())
-  type          ActivityType
-  actorUserId   String?
-  entityType    String?
-  entityId      String?
-  message       String
-  meta          Json?
-  createdAt     DateTime     @default(now())
+  id          String       @id @default(uuid())
+  type        ActivityType
+  actorUserId String?
+  entityType  String?
+  entityId    String?
+  message     String
+  meta        Json?
+  createdAt   DateTime     @default(now())
 
   actor User? @relation("actor", fields: [actorUserId], references: [id])
 
@@ -582,9 +597,21 @@ model Activity {
 enum ActivityType {
   IMPORT_RUN
   NOTE_CREATED
+  NOTE_UPDATED
+  NOTE_DELETED
   MEDIA_ADDED
+  MEDIA_DELETED
   TAG_ADDED
+  ENTITY_CREATED
   ENTITY_UPDATED
+  ENTITY_DELETED
+  RELATIONSHIP_CREATED
+  RELATIONSHIP_DELETED
+  EVENT_CREATED
+  EVENT_UPDATED
+  EVENT_DELETED
+  INVITE_SENT
+  USER_JOINED
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { useViewMode } from "@/hooks/use-view-mode";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,6 +38,7 @@ import {
   User as UserIcon,
   Filter,
   X,
+  UserPlus,
 } from "lucide-react";
 import { PersonProfile } from "@/components/people/PersonProfile";
 
@@ -66,6 +68,8 @@ const PAGE_SIZES = [10, 25, 50, 100];
 const GENERATIONS = Array.from({ length: 14 }, (_, i) => i + 1);
 
 export default function PeoplePage() {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
   const { isLoydOnly } = useViewMode();
   const [data, setData] = useState<PeopleResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -153,16 +157,26 @@ export default function PeoplePage() {
   return (
     <div className="space-y-6">
       {/* Title */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">People</h1>
-        <p className="mt-1 text-muted-foreground">
-          Searchable directory of all people in the family tree.
-          {data && (
-            <span className="ml-2 font-medium text-foreground">
-              {data.total.toLocaleString()} people
-            </span>
-          )}
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">People</h1>
+          <p className="mt-1 text-muted-foreground">
+            Searchable directory of all people in the family tree.
+            {data && (
+              <span className="ml-2 font-medium text-foreground">
+                {data.total.toLocaleString()} people
+              </span>
+            )}
+          </p>
+        </div>
+        {isAdmin && (
+          <Button asChild size="sm" className="shrink-0 gap-1.5">
+            <Link href="/people/new">
+              <UserPlus className="h-4 w-4" />
+              <span className="hidden sm:inline">Add person</span>
+            </Link>
+          </Button>
+        )}
       </div>
 
       {/* Search + Filters toolbar */}
@@ -353,7 +367,7 @@ export default function PeoplePage() {
                         </p>
                         {person.knownAs && (
                           <p className="text-xs text-muted-foreground">
-                            "{person.knownAs}"
+                            &ldquo;{person.knownAs}&rdquo;
                           </p>
                         )}
                       </TableCell>
