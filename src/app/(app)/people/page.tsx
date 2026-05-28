@@ -89,6 +89,8 @@ export default function PeoplePage() {
   const [gender, setGender] = useState<"" | "MALE" | "FEMALE">("");
   const [living, setLiving] = useState(false);
   const [generation, setGeneration] = useState<string>("");
+  const [tag, setTag] = useState<string>("");
+  const [availableTags, setAvailableTags] = useState<{ name: string; count: number }[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -104,7 +106,15 @@ export default function PeoplePage() {
   // Reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [gender, living, generation, limit]);
+  }, [gender, living, generation, tag, limit]);
+
+  // Load available tags for the filter dropdown
+  useEffect(() => {
+    fetch("/api/tags")
+      .then((r) => (r.ok ? r.json() : { tags: [] }))
+      .then((d: { tags: { name: string; count: number }[] }) => setAvailableTags(d.tags))
+      .catch(() => {});
+  }, []);
 
   // Reset page and data when mode changes
   useEffect(() => {
@@ -122,6 +132,7 @@ export default function PeoplePage() {
       if (gender) params.set("gender", gender);
       if (living) params.set("living", "true");
       if (generation) params.set("generation", generation);
+      if (tag) params.set("tag", tag);
       if (isLoydOnly) params.set("loydOnly", "true");
 
       const res = await fetch(`/api/people?${params}`);
@@ -131,18 +142,19 @@ export default function PeoplePage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedQuery, page, limit, gender, living, generation, isLoydOnly]);
+  }, [debouncedQuery, page, limit, gender, living, generation, tag, isLoydOnly]);
 
   useEffect(() => {
     fetchPeople();
   }, [fetchPeople]);
 
-  const hasFilters = gender !== "" || living || generation !== "";
+  const hasFilters = gender !== "" || living || generation !== "" || tag !== "";
 
   function clearFilters() {
     setGender("");
     setLiving(false);
     setGeneration("");
+    setTag("");
     setQuery("");
     setPage(1);
   }
@@ -153,6 +165,7 @@ export default function PeoplePage() {
     if (gender) params.set("gender", gender);
     if (living) params.set("living", "true");
     if (generation) params.set("generation", generation);
+    if (tag) params.set("tag", tag);
     if (isLoydOnly) params.set("loydOnly", "true");
     params.set("format", format);
     window.location.href = `/api/export?${params}`;
@@ -268,6 +281,26 @@ export default function PeoplePage() {
           </SelectContent>
         </Select>
 
+        {/* Tag filter — only shown when tags exist */}
+        {availableTags.length > 0 && (
+          <Select
+            value={tag || "all"}
+            onValueChange={(v) => setTag(v === "all" ? "" : v)}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Tag" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All tags</SelectItem>
+              {availableTags.map((t) => (
+                <SelectItem key={t.name} value={t.name}>
+                  {t.name} ({t.count})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
         {/* Living toggle */}
         <Button
           variant={living ? "default" : "outline"}
@@ -353,6 +386,16 @@ export default function PeoplePage() {
               onClick={() => setLiving(false)}
             >
               Living only
+              <X className="h-3 w-3" />
+            </Badge>
+          )}
+          {tag && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer gap-1 hover:bg-destructive/10"
+              onClick={() => setTag("")}
+            >
+              Tag: {tag}
               <X className="h-3 w-3" />
             </Badge>
           )}

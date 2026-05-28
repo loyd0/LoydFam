@@ -299,6 +299,52 @@ export async function removePartnership(partnershipId: string): Promise<void> {
   revalidatePath(`/people/${p.personBId}`);
 }
 
+// ─── Tags ─────────────────────────────────────────────────────
+
+export async function addTag(personId: string, rawName: string): Promise<void> {
+  const session = await requireAdmin();
+  const name = rawName.trim();
+  if (!name) throw new Error("Tag name is required");
+
+  // Find or create the tag (case-insensitive match on name).
+  const existing = await prisma.tag.findFirst({
+    where: { name: { equals: name, mode: "insensitive" } },
+  });
+  const tag = existing ?? (await prisma.tag.create({ data: { name } }));
+
+  await prisma.tagLink.upsert({
+    where: {
+      tagId_entityType_entityId: { tagId: tag.id, entityType: "PERSON", entityId: personId },
+    },
+    update: {},
+    create: { tagId: tag.id, entityType: "PERSON", entityId: personId },
+  });
+
+  const person = await prisma.person.findUnique({ where: { id: personId } });
+  await logActivity({
+    actorUserId: session.user.id,
+    type: "TAG_ADDED",
+    entityType: "person",
+    entityId: personId,
+    message: `Tagged ${person?.displayName ?? personId} with "${tag.name}"`,
+    meta: { tagId: tag.id, tagName: tag.name },
+  });
+  revalidatePath(`/people/${personId}`);
+}
+
+export async function removeTag(personId: string, tagId: string): Promise<void> {
+  await requireAdmin();
+  await prisma.tagLink.deleteMany({
+    where: { tagId, entityType: "PERSON", entityId: personId },
+  });
+  // Clean up orphaned tags (no remaining links) to keep the tag list tidy.
+  const remaining = await prisma.tagLink.count({ where: { tagId } });
+  if (remaining === 0) {
+    await prisma.tag.delete({ where: { id: tagId } }).catch(() => {});
+  }
+  revalidatePath(`/people/${personId}`);
+}
+
 // ─── Contact ──────────────────────────────────────────────────
 
 export interface ContactPatch {
