@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { parseLoydOnly } from "@/lib/loyd-filter";
+import { parseLoydOnly, LOYD_ONLY_SQL } from "@/lib/loyd-filter";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -12,10 +12,9 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const loydOnly = parseLoydOnly(searchParams);
 
-  // Build optional loyd sql fragment for inline WHERE additions
-  const loydSql = loydOnly
-    ? `AND (p."primaryExternalKey" LIKE 'LOYD:%' OR p.surname IN ('LOYD','LLOYD','LOYD-DAVIES','LOYD DAVIES','CORMACK-LOYD','LOYD (CHARLTON)'))`
-    : "";
+  // Optional Loyd-only SQL fragment for raw queries (people aliased as `p`).
+  // LOYD_ONLY_SQL is a constant — no user input — so interpolation is safe.
+  const loydSql = loydOnly ? `AND ${LOYD_ONLY_SQL}` : "";
 
   const [
     totalPeople,
@@ -44,17 +43,19 @@ export async function GET(request: NextRequest) {
       : prisma.person.count({ where: { isPlaceholder: false } }),
 
     // Living people: have a birth event but no death event
-    prisma.$queryRaw<[{ count: bigint }]>`
+    prisma.$queryRawUnsafe<[{ count: bigint }]>(`
       SELECT COUNT(DISTINCT p.id)::bigint as count
       FROM people p
       INNER JOIN person_events pe_birth ON pe_birth."personId" = p.id
       INNER JOIN events e_birth ON e_birth.id = pe_birth."eventId" AND e_birth.type = 'BIRTH'
-      LEFT JOIN person_events pe_death ON pe_death."personId" = p.id
-      LEFT JOIN events e_death ON e_death.id = pe_death."eventId" AND e_death.type = 'DEATH'
       WHERE p."isPlaceholder" = false
-      AND e_death.id IS NULL
-      ${loydOnly ? prisma.$queryRaw`AND (p."primaryExternalKey" LIKE 'LOYD:%' OR p.surname IN ('LOYD','LLOYD','LOYD-DAVIES','LOYD DAVIES','CORMACK-LOYD','LOYD (CHARLTON)'))` : prisma.$queryRaw``}
-    `.then((r) => Number(r[0]?.count ?? 0)),
+      AND NOT EXISTS (
+        SELECT 1 FROM person_events pe_death
+        JOIN events e_death ON e_death.id = pe_death."eventId" AND e_death.type = 'DEATH'
+        WHERE pe_death."personId" = p.id
+      )
+      ${loydSql}
+    `).then((r) => Number(r[0]?.count ?? 0)),
 
     // Total events (not filtered — it's a global count)
     prisma.event.count(),
@@ -63,22 +64,30 @@ export async function GET(request: NextRequest) {
     prisma.importIssue.count(),
 
     // Upcoming birthdays
-    prisma.$queryRaw<
-      { id: string; displayName: string; birthMonth: number; birthDay: number }[]
-    >`
-      SELECT DISTINCT p.id, p."displayName", e."dateMonth" as "birthMonth", e."dateDay" as "birthDay"
+    prisma.$queryRawUnsafe<
+      { id: string; displayName: string; birthMonth: number; birthDay: number; birthYear: number | null }[]
+    >(`
+      SELECT DISTINCT p.id, p."displayName",
+        e."dateMonth" as "birthMonth", e."dateDay" as "birthDay", e."dateYear" as "birthYear",
+        MOD(
+          (e."dateMonth" * 31 + e."dateDay")
+          - (EXTRACT(MONTH FROM CURRENT_DATE)::int * 31 + EXTRACT(DAY FROM CURRENT_DATE)::int)
+          + 372, 372) as sort_key
       FROM people p
       INNER JOIN person_events pe ON pe."personId" = p.id
       INNER JOIN events e ON e.id = pe."eventId" AND e.type = 'BIRTH'
-      LEFT JOIN person_events pe_death ON pe_death."personId" = p.id
-      LEFT JOIN events e_death ON e_death.id = pe_death."eventId" AND e_death.type = 'DEATH'
       WHERE p."isPlaceholder" = false
-      AND e_death.id IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM person_events pe_death
+        JOIN events e_death ON e_death.id = pe_death."eventId" AND e_death.type = 'DEATH'
+        WHERE pe_death."personId" = p.id
+      )
       AND e."dateMonth" IS NOT NULL
       AND e."dateDay" IS NOT NULL
-      ORDER BY e."dateMonth", e."dateDay"
+      ${loydSql}
+      ORDER BY sort_key
       LIMIT 10
-    `,
+    `),
 
     // Recent activity
     prisma.activity.findMany({
@@ -117,9 +126,6 @@ export async function GET(request: NextRequest) {
         )
       `.then((r) => Number(r[0]?.count ?? 0)),
     ]);
-
-  // Suppress unused variable warning
-  void loydSql;
 
   return NextResponse.json({
     stats: {
