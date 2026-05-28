@@ -18,8 +18,6 @@ import {
 import "@xyflow/react/dist/style.css";
 import { Network, Search, User as UserIcon, Plus, Minus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 import {
   CommandDialog,
   CommandEmpty,
@@ -278,7 +276,7 @@ export default function MindMapPage() {
           >
             {/* Header / Name */}
             <div className="flex items-start gap-4 w-full">
-              <div flex-1 min-w-0>
+              <div className="flex-1 min-w-0">
                 <h3 className="text-base font-semibold truncate text-foreground">{shortName}</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">{years}</p>
                 

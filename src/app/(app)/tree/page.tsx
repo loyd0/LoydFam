@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useViewMode } from "@/hooks/use-view-mode";
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
+  Handle,
+  Position,
   useNodesState,
   useEdgesState,
   type Node,
   type Edge,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
@@ -97,6 +100,8 @@ function PersonNodeComponent({ data }: { data: TreePerson }) {
       className={`rounded-lg border-2 px-3 py-2 shadow-sm min-w-[140px] text-center cursor-pointer hover:shadow-md transition-shadow${dimmed ? " opacity-60" : ""}`}
       style={{ ...borderStyle, ...bgStyle }}
     >
+      <Handle type="target" position={Position.Top} className="!h-1.5 !w-1.5 !border-0 !bg-border" />
+      <Handle type="source" position={Position.Bottom} className="!h-1.5 !w-1.5 !border-0 !bg-border" />
       <p className={`text-xs font-semibold truncate max-w-[160px]${dimmed ? " text-muted-foreground" : ""}`}>
         {shortName}
       </p>
@@ -256,6 +261,26 @@ export default function TreePage() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selectedPerson, setSelectedPerson] = useState<TreePerson | null>(null);
+  const rfInstance = useRef<ReactFlowInstance<Node, Edge> | null>(null);
+
+  // Focus the viewport on the root person and their immediate children at a
+  // readable zoom. Fitting the entire (often very wide) descendant tree would
+  // shrink nodes to illegibility, so we frame the top of the tree and let the
+  // user pan/zoom from there.
+  const focusOnRoot = useCallback(
+    (data: TreeData, layoutEdges: Edge[]) => {
+      const instance = rfInstance.current;
+      if (!instance) return;
+      const childIds = layoutEdges
+        .filter((e) => e.source === data.rootId)
+        .map((e) => e.target);
+      const focusNodes = [data.rootId, ...childIds].map((id) => ({ id }));
+      window.requestAnimationFrame(() => {
+        instance.fitView({ nodes: focusNodes, padding: 0.25, maxZoom: 0.9, duration: 400 });
+      });
+    },
+    []
+  );
 
   // Sync lineage with global mode (only override if user hasn't explicitly set full)
   useEffect(() => {
@@ -301,7 +326,11 @@ export default function TreePage() {
     if (rootNode) {
       setSelectedPerson(rootNode);
     }
-  }, [treeData, setNodes, setEdges]);
+
+    // Frame the viewport on the root + children once nodes are measured.
+    const t = setTimeout(() => focusOnRoot(treeData, layoutEdges), 80);
+    return () => clearTimeout(t);
+  }, [treeData, setNodes, setEdges, focusOnRoot]);
 
   // Handle node click to show profile card
   const onNodeClick = useCallback(
@@ -440,9 +469,9 @@ export default function TreePage() {
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onNodeClick={onNodeClick}
+                onInit={(instance) => { rfInstance.current = instance; }}
                 nodeTypes={nodeTypes}
-                fitView
-                minZoom={0.1}
+                minZoom={0.08}
                 maxZoom={2}
                 defaultEdgeOptions={{
                   type: "smoothstep",
@@ -501,14 +530,6 @@ function layoutTree(data: TreeData) {
     if (!parentMap.has(e.childId)) parentMap.set(e.childId, e.parentId);
   }
 
-  // Build spouse map: personId -> [spouseId, ...]
-  // We only show spouses of nodes that are in the main BFS tree
-  const spouseMap = new Map<string, string[]>();
-  for (const e of data.edges) {
-    // edges here are parent-child; spouses come from API separately
-    // We'll detect spouses as nodes not reachable via parent-child from root
-  }
-
   // First pass: find all nodes reachable from root via parent-child BFS
   const inTree = new Set<string>();
   const queue = [data.rootId];
@@ -519,23 +540,9 @@ function layoutTree(data: TreeData) {
     for (const cid of childrenMap.get(id) ?? []) queue.push(cid);
   }
 
-  // Nodes NOT in the tree are spouses/orphans — match them to their tree partner
+  // Nodes NOT in the tree are spouses/orphans — positioned beside their tree
+  // partner in the positioning phase below.
   const notInTree = data.nodes.filter((n) => !inTree.has(n.id));
-  for (const orphan of notInTree) {
-    // Find their tree partner via data.edges (the API includes partnership edges implicitly
-    // by including spouse nodes in the response). We detect partners by finding who
-    // lists this person as a spouse (data comes without explicit spouse edges,
-    // so we pair by closest-generation tree node that shares a parent-child child with them).
-    // Simpler approach: just pair each non-tree node to its nearest tree neighbor
-    // by checking if any tree node has a child in common (sibling detection).
-    // Since the API doesn't send explicit spouse edges, we can't do better without changes.
-    // For now: attach each non-tree node as a spouse of the root person at the same depth,
-    // OR find the tree node whose children include nodes also near this node.
-
-    // Best approximation without explicit spouse edges:
-    // Place non-tree nodes beside the tree node that appears at the same generation level.
-    // We'll handle this in the positioning phase below.
-  }
 
   // Compute subtree widths (children only, not spouses — spouses add width at render time)
   const subtreeWidth = new Map<string, number>();

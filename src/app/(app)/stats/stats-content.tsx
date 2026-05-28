@@ -131,10 +131,6 @@ const GENDER_COLS: Record<string, string> = {
   UNKNOWN: C.muted,
 };
 
-const MONTH_NAMES = [
-  "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
 
 // ─── ANIMATED COUNTER ─────────────────────────────────────────────────────────
 
@@ -278,7 +274,6 @@ function StatTile({
 // ─── POPULATION TAB ───────────────────────────────────────────────────────────
 
 function PopulationTab({ data }: { data: StatsData }) {
-  const maxDecade = Math.max(...data.birthsByDecade.map((d) => d.count), 1);
 
   const pieData = data.population.genderBreakdown.map((g) => ({
     name: g.gender === "MALE" ? "Male" : g.gender === "FEMALE" ? "Female" : "Unknown",
@@ -515,7 +510,7 @@ function LongevityTab({ data }: { data: StatsData }) {
             : `Men in the Loyd family outlive women by ${Math.abs(genderGap)} years on average. `}
           Modern UK data shows a female longevity advantage of ~3.7 years (ONS 2022). Historical
           advantages were lower due to childbirth mortality — any deviation here is genealogically significant.
-          The female biological advantage is linked to oestrogen's cardioprotective effects and lower
+          The female biological advantage is linked to oestrogen&rsquo;s cardioprotective effects and lower
           baseline inflammation markers (Austad & Bartke, 2016).
         </InsightCard>
       )}
@@ -658,7 +653,6 @@ function LongevityTab({ data }: { data: StatsData }) {
 
 function NamesTab({ data }: { data: StatsData }) {
   const maxName = Math.max(...data.topNames.map((n) => n.count), 1);
-  const maxSurname = Math.max(...data.topSurnames.map((n) => n.count), 1);
 
   const chartColors = [
     C.green1, C.green2, C.green3, C.green4, C.green5,
