@@ -60,6 +60,9 @@ export async function GET(
         include: { media: true },
         orderBy: { sortOrder: "asc" },
       },
+      tagLinks: {
+        include: { tag: true },
+      },
     },
   });
 
@@ -107,9 +110,16 @@ export async function GET(
     parents: person.parentRelations.map((r) => ({ ...r.parent, relationId: r.id })),
     children: person.childRelations.map((r) => ({ ...r.child, relationId: r.id })),
     spouses,
+    tags: person.tagLinks.map((tl) => ({
+      id: tl.tag.id,
+      name: tl.tag.name,
+      colour: tl.tag.colour,
+      linkId: tl.id,
+    })),
     parentRelations: undefined,
     childRelations: undefined,
     partnershipsA: undefined,
     partnershipsB: undefined,
+    tagLinks: undefined,
   });
 }

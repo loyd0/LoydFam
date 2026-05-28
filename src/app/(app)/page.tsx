@@ -6,7 +6,6 @@ import { useViewMode } from "@/hooks/use-view-mode";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";

@@ -35,6 +35,7 @@ import { DeletePersonDialog } from "@/components/people/edit/DeletePersonDialog"
 import { NotesPanel } from "@/components/notes/NotesPanel";
 import { ActivityFeed } from "@/components/history/ActivityFeed";
 import { PhotoGallery } from "@/components/media/PhotoGallery";
+import { TagsSection, type PersonTag } from "@/components/people/TagsSection";
 import {
   removeParentChild,
   removePartnership,
@@ -125,6 +126,7 @@ export interface PersonDetail {
   parents: RelatedPerson[];
   children: RelatedPerson[];
   spouses: SpouseInfo[];
+  tags?: PersonTag[];
   notes?: NoteRecord[];
   mediaLinks?: MediaLinkRecord[];
   contact: {
@@ -495,6 +497,14 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
           </div>
         </div>
       </div>
+
+      {/* Tags */}
+      <TagsSection
+        personId={person.id}
+        tags={person.tags ?? []}
+        canEdit={isAdmin}
+        onChange={refreshAfterEdit}
+      />
 
       <div className="grid gap-8 md:grid-cols-2">
         {/* Key Facts */}

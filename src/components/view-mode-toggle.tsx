@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 
 export function ViewModeToggle() {
-  const { viewMode, setViewMode, isLoydOnly } = useViewMode();
+  const { setViewMode, isLoydOnly } = useViewMode();
 
   return (
     <TooltipProvider delayDuration={300}>
