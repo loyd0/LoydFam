@@ -31,6 +31,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Users,
   Search,
   ChevronLeft,
@@ -39,6 +47,7 @@ import {
   Filter,
   X,
   UserPlus,
+  Download,
 } from "lucide-react";
 import { PersonProfile } from "@/components/people/PersonProfile";
 
@@ -138,6 +147,17 @@ export default function PeoplePage() {
     setPage(1);
   }
 
+  function exportData(format: "csv" | "json" | "gedcom") {
+    const params = new URLSearchParams();
+    if (debouncedQuery) params.set("q", debouncedQuery);
+    if (gender) params.set("gender", gender);
+    if (living) params.set("living", "true");
+    if (generation) params.set("generation", generation);
+    if (isLoydOnly) params.set("loydOnly", "true");
+    params.set("format", format);
+    window.location.href = `/api/export?${params}`;
+  }
+
   function openDrawer(id: string) {
     setSelectedId(id);
     setDrawerOpen(true);
@@ -169,14 +189,37 @@ export default function PeoplePage() {
             )}
           </p>
         </div>
-        {isAdmin && (
-          <Button asChild size="sm" className="shrink-0 gap-1.5">
-            <Link href="/people/new">
-              <UserPlus className="h-4 w-4" />
-              <span className="hidden sm:inline">Add person</span>
-            </Link>
-          </Button>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">Export</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Export {data ? `${data.total.toLocaleString()} people` : "people"}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => exportData("csv")}>
+                CSV (spreadsheet)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportData("json")}>
+                JSON (structured)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportData("gedcom")}>
+                GEDCOM (genealogy)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {isAdmin && (
+            <Button asChild size="sm" className="gap-1.5">
+              <Link href="/people/new">
+                <UserPlus className="h-4 w-4" />
+                <span className="hidden sm:inline">Add person</span>
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Search + Filters toolbar */}
