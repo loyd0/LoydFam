@@ -213,7 +213,7 @@ function ChartTooltip({
           <span className="text-muted-foreground">{p.name}:</span>
           <span className="font-semibold">
             {p.value.toLocaleString()}
-            {unit}
+            {unit === " people" && p.value === 1 ? " person" : unit}
           </span>
         </div>
       ))}
