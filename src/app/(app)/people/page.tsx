@@ -50,6 +50,7 @@ import {
   Download,
 } from "lucide-react";
 import { PersonProfile } from "@/components/people/PersonProfile";
+import { SavedViews, type PeopleFilter } from "@/components/people/SavedViews";
 
 interface PersonRow {
   id: string;
@@ -156,6 +157,17 @@ export default function PeoplePage() {
     setGeneration("");
     setTag("");
     setQuery("");
+    setPage(1);
+  }
+
+  const currentFilter: PeopleFilter = { q: query, gender, generation, tag, living };
+
+  function applyView(f: PeopleFilter) {
+    setQuery(f.q ?? "");
+    setGender(f.gender ?? "");
+    setGeneration(f.generation ?? "");
+    setTag(f.tag ?? "");
+    setLiving(Boolean(f.living));
     setPage(1);
   }
 
@@ -328,6 +340,13 @@ export default function PeoplePage() {
             Clear
           </Button>
         )}
+
+        {/* Saved views */}
+        <SavedViews
+          current={currentFilter}
+          hasFilters={hasFilters || query !== ""}
+          onApply={applyView}
+        />
 
         {/* Spacer */}
         <div className="flex-1" />
