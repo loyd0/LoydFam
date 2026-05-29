@@ -96,6 +96,12 @@ function LoginForm() {
           "Sign In"
         )}
       </Button>
+
+      <p className="text-center text-xs text-muted-foreground pt-2">
+        <a href="/forgot-password" className="underline underline-offset-2 hover:text-foreground">
+          Forgot password?
+        </a>
+      </p>
     </form>
   );
 }

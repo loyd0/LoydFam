@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
   const gender = searchParams.get("gender")?.toUpperCase();
   const generation = searchParams.get("generation");
   const living = searchParams.get("living"); // "true" → only people with no death event
+  const tag = searchParams.get("tag")?.trim();
   const loydOnly = parseLoydOnly(searchParams);
   const skip = (page - 1) * limit;
 
@@ -62,6 +63,13 @@ export async function GET(request: NextRequest) {
           event: { type: "DEATH" },
         },
       },
+    });
+  }
+
+  // Tag filter
+  if (tag) {
+    andClauses.push({
+      tagLinks: { some: { entityType: "PERSON", tag: { name: tag } } },
     });
   }
 

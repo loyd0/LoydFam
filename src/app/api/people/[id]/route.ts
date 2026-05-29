@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
   if (!session?.user) {
@@ -23,16 +23,12 @@ export async function GET(
       },
       parentRelations: {
         include: {
-          parent: {
-            select: { id: true, displayName: true, gender: true },
-          },
+          parent: { select: { id: true, displayName: true, gender: true } },
         },
       },
       childRelations: {
         include: {
-          child: {
-            select: { id: true, displayName: true, gender: true },
-          },
+          child: { select: { id: true, displayName: true, gender: true } },
         },
       },
       partnershipsA: {
@@ -54,10 +50,18 @@ export async function GET(
       contact: true,
       notes: {
         orderBy: { createdAt: "desc" },
+        include: {
+          createdBy: {
+            select: { id: true, name: true, email: true },
+          },
+        },
       },
       mediaLinks: {
         include: { media: true },
         orderBy: { sortOrder: "asc" },
+      },
+      tagLinks: {
+        include: { tag: true },
       },
     },
   });
@@ -66,7 +70,6 @@ export async function GET(
     return NextResponse.json({ error: "Person not found" }, { status: 404 });
   }
 
-  // Consolidate partnerships into a single list
   const spouses = [
     ...person.partnershipsA.map((p) => ({
       id: p.personB.id,
@@ -75,6 +78,7 @@ export async function GET(
       isPlaceholder: p.personB.isPlaceholder,
       type: p.type,
       notes: p.notesMd,
+      partnershipId: p.id,
       marriageDate: p.startEvent
         ? {
             exact: p.startEvent.dateExact,
@@ -90,6 +94,7 @@ export async function GET(
       isPlaceholder: p.personA.isPlaceholder,
       type: p.type,
       notes: p.notesMd,
+      partnershipId: p.id,
       marriageDate: p.startEvent
         ? {
             exact: p.startEvent.dateExact,
@@ -102,13 +107,19 @@ export async function GET(
 
   return NextResponse.json({
     ...person,
-    parents: person.parentRelations.map((r) => r.parent),
-    children: person.childRelations.map((r) => r.child),
+    parents: person.parentRelations.map((r) => ({ ...r.parent, relationId: r.id })),
+    children: person.childRelations.map((r) => ({ ...r.child, relationId: r.id })),
     spouses,
-    // Clean up the raw relation fields
+    tags: person.tagLinks.map((tl) => ({
+      id: tl.tag.id,
+      name: tl.tag.name,
+      colour: tl.tag.colour,
+      linkId: tl.id,
+    })),
     parentRelations: undefined,
     childRelations: undefined,
     partnershipsA: undefined,
     partnershipsB: undefined,
+    tagLinks: undefined,
   });
 }

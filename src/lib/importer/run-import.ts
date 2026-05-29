@@ -10,12 +10,12 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import { parseWorkbook, hashRow } from "./parse-workbook";
 import { extractCanonical } from "./canonical-extract";
 import type {
   PersonPayload,
   EventPayload,
-  ContactPayload,
 } from "./canonical-extract";
 
 /** Maximum Prisma operations per $transaction call */
@@ -364,8 +364,7 @@ function upsertPersonQuery(p: PersonPayload) {
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0] extends infer T ? T : never;
+type TxClient = Prisma.TransactionClient;
 
 /**
  * Upsert an event within an interactive transaction.
@@ -376,7 +375,7 @@ async function upsertEventInTx(
   personDbId: string
 ) {
   // Find existing person_event for this person + type + role
-  const existing = await (tx as any).personEvent.findFirst({
+  const existing = await tx.personEvent.findFirst({
     where: {
       personId: personDbId,
       role: e.role,
@@ -386,7 +385,7 @@ async function upsertEventInTx(
   });
 
   if (existing) {
-    await (tx as any).event.update({
+    await tx.event.update({
       where: { id: existing.eventId },
       data: {
         dateExact: e.dateExact,
@@ -401,7 +400,7 @@ async function upsertEventInTx(
   }
 
   // Create new event + link
-  const event = await (tx as any).event.create({
+  const event = await tx.event.create({
     data: {
       type: e.type,
       dateExact: e.dateExact,
@@ -413,7 +412,7 @@ async function upsertEventInTx(
     },
   });
 
-  await (tx as any).personEvent.create({
+  await tx.personEvent.create({
     data: {
       personId: personDbId,
       eventId: event.id,

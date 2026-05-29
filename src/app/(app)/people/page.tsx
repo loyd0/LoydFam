@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { useViewMode } from "@/hooks/use-view-mode";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Users,
   Search,
   ChevronLeft,
@@ -37,8 +46,11 @@ import {
   User as UserIcon,
   Filter,
   X,
+  UserPlus,
+  Download,
 } from "lucide-react";
 import { PersonProfile } from "@/components/people/PersonProfile";
+import { SavedViews, type PeopleFilter } from "@/components/people/SavedViews";
 
 interface PersonRow {
   id: string;
@@ -66,6 +78,8 @@ const PAGE_SIZES = [10, 25, 50, 100];
 const GENERATIONS = Array.from({ length: 14 }, (_, i) => i + 1);
 
 export default function PeoplePage() {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
   const { isLoydOnly } = useViewMode();
   const [data, setData] = useState<PeopleResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,6 +90,8 @@ export default function PeoplePage() {
   const [gender, setGender] = useState<"" | "MALE" | "FEMALE">("");
   const [living, setLiving] = useState(false);
   const [generation, setGeneration] = useState<string>("");
+  const [tag, setTag] = useState<string>("");
+  const [availableTags, setAvailableTags] = useState<{ name: string; count: number }[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -91,7 +107,15 @@ export default function PeoplePage() {
   // Reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [gender, living, generation, limit]);
+  }, [gender, living, generation, tag, limit]);
+
+  // Load available tags for the filter dropdown
+  useEffect(() => {
+    fetch("/api/tags")
+      .then((r) => (r.ok ? r.json() : { tags: [] }))
+      .then((d: { tags: { name: string; count: number }[] }) => setAvailableTags(d.tags))
+      .catch(() => {});
+  }, []);
 
   // Reset page and data when mode changes
   useEffect(() => {
@@ -109,6 +133,7 @@ export default function PeoplePage() {
       if (gender) params.set("gender", gender);
       if (living) params.set("living", "true");
       if (generation) params.set("generation", generation);
+      if (tag) params.set("tag", tag);
       if (isLoydOnly) params.set("loydOnly", "true");
 
       const res = await fetch(`/api/people?${params}`);
@@ -118,20 +143,44 @@ export default function PeoplePage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedQuery, page, limit, gender, living, generation, isLoydOnly]);
+  }, [debouncedQuery, page, limit, gender, living, generation, tag, isLoydOnly]);
 
   useEffect(() => {
     fetchPeople();
   }, [fetchPeople]);
 
-  const hasFilters = gender !== "" || living || generation !== "";
+  const hasFilters = gender !== "" || living || generation !== "" || tag !== "";
 
   function clearFilters() {
     setGender("");
     setLiving(false);
     setGeneration("");
+    setTag("");
     setQuery("");
     setPage(1);
+  }
+
+  const currentFilter: PeopleFilter = { q: query, gender, generation, tag, living };
+
+  function applyView(f: PeopleFilter) {
+    setQuery(f.q ?? "");
+    setGender(f.gender ?? "");
+    setGeneration(f.generation ?? "");
+    setTag(f.tag ?? "");
+    setLiving(Boolean(f.living));
+    setPage(1);
+  }
+
+  function exportData(format: "csv" | "json" | "gedcom") {
+    const params = new URLSearchParams();
+    if (debouncedQuery) params.set("q", debouncedQuery);
+    if (gender) params.set("gender", gender);
+    if (living) params.set("living", "true");
+    if (generation) params.set("generation", generation);
+    if (tag) params.set("tag", tag);
+    if (isLoydOnly) params.set("loydOnly", "true");
+    params.set("format", format);
+    window.location.href = `/api/export?${params}`;
   }
 
   function openDrawer(id: string) {
@@ -153,16 +202,49 @@ export default function PeoplePage() {
   return (
     <div className="space-y-6">
       {/* Title */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">People</h1>
-        <p className="mt-1 text-muted-foreground">
-          Searchable directory of all people in the family tree.
-          {data && (
-            <span className="ml-2 font-medium text-foreground">
-              {data.total.toLocaleString()} people
-            </span>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">People</h1>
+          <p className="mt-1 text-muted-foreground">
+            Searchable directory of all people in the family tree.
+            {data && (
+              <span className="ml-2 font-medium text-foreground">
+                {data.total.toLocaleString()} people
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">Export</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Export {data ? `${data.total.toLocaleString()} people` : "people"}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => exportData("csv")}>
+                CSV (spreadsheet)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportData("json")}>
+                JSON (structured)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportData("gedcom")}>
+                GEDCOM (genealogy)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {isAdmin && (
+            <Button asChild size="sm" className="gap-1.5">
+              <Link href="/people/new">
+                <UserPlus className="h-4 w-4" />
+                <span className="hidden sm:inline">Add person</span>
+              </Link>
+            </Button>
           )}
-        </p>
+        </div>
       </div>
 
       {/* Search + Filters toolbar */}
@@ -211,6 +293,26 @@ export default function PeoplePage() {
           </SelectContent>
         </Select>
 
+        {/* Tag filter — only shown when tags exist */}
+        {availableTags.length > 0 && (
+          <Select
+            value={tag || "all"}
+            onValueChange={(v) => setTag(v === "all" ? "" : v)}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Tag" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All tags</SelectItem>
+              {availableTags.map((t) => (
+                <SelectItem key={t.name} value={t.name}>
+                  {t.name} ({t.count})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
         {/* Living toggle */}
         <Button
           variant={living ? "default" : "outline"}
@@ -238,6 +340,13 @@ export default function PeoplePage() {
             Clear
           </Button>
         )}
+
+        {/* Saved views */}
+        <SavedViews
+          current={currentFilter}
+          hasFilters={hasFilters || query !== ""}
+          onApply={applyView}
+        />
 
         {/* Spacer */}
         <div className="flex-1" />
@@ -299,6 +408,16 @@ export default function PeoplePage() {
               <X className="h-3 w-3" />
             </Badge>
           )}
+          {tag && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer gap-1 hover:bg-destructive/10"
+              onClick={() => setTag("")}
+            >
+              Tag: {tag}
+              <X className="h-3 w-3" />
+            </Badge>
+          )}
         </div>
       )}
 
@@ -353,7 +472,7 @@ export default function PeoplePage() {
                         </p>
                         {person.knownAs && (
                           <p className="text-xs text-muted-foreground">
-                            "{person.knownAs}"
+                            &ldquo;{person.knownAs}&rdquo;
                           </p>
                         )}
                       </TableCell>

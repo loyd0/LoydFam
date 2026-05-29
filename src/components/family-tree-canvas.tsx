@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -12,6 +12,7 @@ import {
   useEdgesState,
   type Node,
   type Edge,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
@@ -273,6 +274,19 @@ function ProfileCard({
 export function FamilyTreeCanvas({ data }: { data: TreeData }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const rfInstance = useRef<ReactFlowInstance<Node, Edge> | null>(null);
+
+  // SSR-safe dark-mode flag. Reading `document` during render crashes static
+  // prerendering, so we default to light on the server and correct on mount.
+  const [isDark, setIsDark] = useState(false);
+  useEffect(() => {
+    const root = document.documentElement;
+    const sync = () => setIsDark(root.classList.contains("dark"));
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
 
   // Auto-select the root person whenever the dataset changes, so the profile
   // card opens on "you are here". Adjusting state during render off a tracked
@@ -284,6 +298,21 @@ export function FamilyTreeCanvas({ data }: { data: TreeData }) {
     setSelectedPerson(data?.nodes.find((n) => n.id === data.rootId) ?? null);
   }
 
+  // Frame the viewport on the root and their immediate children at a readable
+  // zoom. Fitting the entire (often very wide) descendant tree would shrink
+  // nodes to illegibility, so we frame the top and let the user pan/zoom.
+  const focusOnRoot = useCallback((d: TreeData, layoutEdges: Edge[]) => {
+    const instance = rfInstance.current;
+    if (!instance) return;
+    const childIds = layoutEdges
+      .filter((e) => e.source === d.rootId)
+      .map((e) => e.target);
+    const focusNodes = [d.rootId, ...childIds].map((id) => ({ id }));
+    window.requestAnimationFrame(() => {
+      instance.fitView({ nodes: focusNodes, padding: 0.25, maxZoom: 0.9, duration: 400 });
+    });
+  }, []);
+
   useEffect(() => {
     if (!data || data.nodes.length === 0) {
       setNodes([]);
@@ -293,7 +322,11 @@ export function FamilyTreeCanvas({ data }: { data: TreeData }) {
     const { layoutNodes, layoutEdges } = layoutTree(data);
     setNodes(layoutNodes);
     setEdges(layoutEdges);
-  }, [data, setNodes, setEdges]);
+
+    // Frame the viewport once nodes are measured.
+    const t = setTimeout(() => focusOnRoot(data, layoutEdges), 80);
+    return () => clearTimeout(t);
+  }, [data, setNodes, setEdges, focusOnRoot]);
 
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
@@ -311,9 +344,11 @@ export function FamilyTreeCanvas({ data }: { data: TreeData }) {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
+        onInit={(instance) => {
+          rfInstance.current = instance;
+        }}
         nodeTypes={nodeTypes}
-        fitView
-        minZoom={0.1}
+        minZoom={0.08}
         maxZoom={2}
         defaultEdgeOptions={{
           type: "smoothstep",
@@ -328,8 +363,6 @@ export function FamilyTreeCanvas({ data }: { data: TreeData }) {
           zoomable
           nodeColor={(n) => {
             const d = n.data as unknown as TreePerson;
-            const isDark =
-              document.documentElement.classList.contains("dark");
             // Match the node palette exactly: male = navy/slate (hue 240),
             // female = forest green (hue 150).
             if (d.gender === "MALE")
@@ -338,11 +371,7 @@ export function FamilyTreeCanvas({ data }: { data: TreeData }) {
               return isDark ? "oklch(0.75 0.12 150)" : "oklch(0.45 0.12 150)";
             return isDark ? "oklch(0.45 0.01 160)" : "oklch(0.80 0.01 160)";
           }}
-          maskColor={
-            document.documentElement.classList.contains("dark")
-              ? "rgba(0,0,0,0.25)"
-              : "rgba(0,0,0,0.06)"
-          }
+          maskColor={isDark ? "rgba(0,0,0,0.25)" : "rgba(0,0,0,0.06)"}
         />
       </ReactFlow>
 

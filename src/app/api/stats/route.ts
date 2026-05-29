@@ -67,11 +67,13 @@ export async function GET(request: NextRequest) {
       SELECT COUNT(DISTINCT p.id)::bigint as count FROM people p
       INNER JOIN person_events pe ON pe."personId" = p.id
       INNER JOIN events e ON e.id = pe."eventId" AND e.type = 'BIRTH'
-      LEFT JOIN person_events pd ON pd."personId" = p.id
-      LEFT JOIN events ed ON ed.id = pd."eventId" AND ed.type = 'DEATH'
       WHERE p."isPlaceholder" = false
         ${lSqlP}
-        AND ed.id IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM person_events pd
+          JOIN events ed ON ed.id = pd."eventId" AND ed.type = 'DEATH'
+          WHERE pd."personId" = p.id
+        )
         AND e."dateYear" IS NOT NULL
         AND e."dateYear" > (EXTRACT(YEAR FROM CURRENT_DATE)::int - 120)
     `).then((r) => Number(r[0]?.count ?? 0)),
@@ -303,10 +305,12 @@ export async function GET(request: NextRequest) {
       FROM people p
       INNER JOIN person_events peb ON peb."personId" = p.id
       INNER JOIN events eb ON eb.id = peb."eventId" AND eb.type = 'BIRTH' AND eb."dateYear" IS NOT NULL
-      LEFT JOIN person_events ped ON ped."personId" = p.id
-      LEFT JOIN events ed ON ed.id = ped."eventId" AND ed.type = 'DEATH'
       WHERE p."isPlaceholder" = false ${lSqlP}
-        AND ed.id IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM person_events ped
+          JOIN events ed ON ed.id = ped."eventId" AND ed.type = 'DEATH'
+          WHERE ped."personId" = p.id
+        )
         AND eb."dateYear" > (EXTRACT(YEAR FROM CURRENT_DATE)::int - 110)
       GROUP BY age_bucket
       ORDER BY age_bucket

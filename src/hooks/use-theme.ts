@@ -26,9 +26,12 @@ function applyTheme(theme: Theme) {
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>("system");
 
-  // On mount, read saved preference and apply
+  // On mount, read the saved preference and apply it. We start from the
+  // server-rendered default and update on the client to avoid a hydration
+  // mismatch, so the setState here is intentional.
   useEffect(() => {
     const saved = (localStorage.getItem(STORAGE_KEY) as Theme | null) ?? "system";
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setThemeState(saved);
     applyTheme(saved);
   }, []);
