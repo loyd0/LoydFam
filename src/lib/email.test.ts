@@ -41,9 +41,12 @@ test("Cloudflare email configuration and recipient acceptance", async (t) => {
   globalThis.fetch = async () => Response.json({ secret: "never expose provider errors" }, { status: 403 });
   const failed = await sendMail(mail);
   assert.equal(failed.sent, false);
+  assert.equal(failed.uncertain, undefined);
   assert.doesNotMatch(failed.error!, /secret/);
   globalThis.fetch = async () => { throw new Error("private provider details"); };
-  assert.equal((await sendMail(mail)).sent, false);
+  const uncertain = await sendMail(mail);
+  assert.equal(uncertain.sent, false);
+  assert.equal(uncertain.uncertain, true);
   process.env.EMAIL_FROM = "Name <archive@loyd.family>";
   assert.equal(emailConfigured(), false);
 

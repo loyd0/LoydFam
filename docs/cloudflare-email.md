@@ -7,11 +7,11 @@ Invitation and password reset messages use Cloudflare Email Service's REST API d
 1. In the Cloudflare account that owns `loyd.family`, open Email Service → Email Sending and onboard the sending domain. Review the DNS preview first; preserve existing mailbox MX records. Cloudflare uses its `cf-bounce` return-path subdomain for bounces.
 2. Check SPF, DKIM and DMARC status in Email Sending. Domain setup requires Cloudflare DNS and the account's Email Sending entitlement.
 3. Create a restricted API token with **Email Sending: Edit** for this account.
-4. Set these server-only variables in the Vercel project's Preview environment:
+4. Set these server-only variables in the Vercel project's Preview and Production environments:
    - `CLOUDFLARE_EMAIL_ACCOUNT_ID`: the domain's Cloudflare account ID.
    - `CLOUDFLARE_EMAIL_API_TOKEN`: the restricted token.
    - `EMAIL_FROM`: a plain address on the onboarded domain, `archive@notify.loyd.family`.
-   - `APP_URL`: `https://loyd-family-preview.vercel.app`.
+   - `APP_URL`: `https://loyd.family` for Production; `https://loyd-family-preview.vercel.app` for Preview.
 5. Redeploy the preview. A read-only credential check is available with `node scripts/check-cloudflare-email.mjs .env.vercel-preview.local`. Domain DNS status must also be checked in Cloudflare.
 6. With an explicitly authorized test recipient, send an invitation and verify delivery and the acceptance link. API acceptance is not proof of inbox delivery. Preview deployment protection also applies to email links.
 
@@ -23,6 +23,8 @@ Namecheap now delegates `loyd.family` to `dexter.ns.cloudflare.com` and `mariah.
 
 Email Sending is enabled for `notify.loyd.family`, with return path `cf-bounce.notify.loyd.family`. Its six subdomain DNS records were applied and Cloudflare reports DNS ready with no errors. Existing incoming iCloud mail records are unchanged.
 
-Remaining: create a restricted Email Sending token, configure the Preview environment and verify delivery to an explicitly authorized recipient. The connector cannot manage API tokens (Cloudflare error 9109); Cloudflare dashboard sign-in has been requested. No token is configured and email delivery is not yet verified. `APP_URL` is set for Preview.
+The restricted token, account ID and sender are configured in both Vercel environments. A local send through the application adapter to an authorized recipient was accepted by Cloudflare on 30 September 2026. Inbox delivery still requires recipient confirmation. The shared invitation, reset and test templates use the archive’s cream and forest-green palette, sans-serif typography, accessible text links and plain-text alternatives.
+
+An uncertain delivery result keeps the password reset token valid until expiry, use, or replacement by a newer reset. A definite rejection invalidates it. No automatic resend is attempted. Environment changes take effect on the next deployment.
 
 References: [Cloudflare send setup](https://developers.cloudflare.com/email-service/get-started/send-emails/), [REST API](https://developers.cloudflare.com/email-service/api/send-emails/rest-api/).

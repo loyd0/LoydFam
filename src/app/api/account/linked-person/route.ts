@@ -12,7 +12,7 @@ export async function GET() {
       id: true, displayName: true, gender: true, externalId: true, sourceSystem: true,
       primaryExternalKey: true,
       legacyGeneration: true, generationFromWilliam: true,
-      events: { where: { event: { type: { in: ["BIRTH", "DEATH"] } } }, select: { event: { select: { type: true, dateYear: true } } }, take: 2 },
+      events: { where: { event: { type: { in: ["BIRTH", "DEATH"] } } }, select: { event: { select: { type: true, dateYear: true } } }, orderBy: [{ event: { dateYear: "asc" } }, { eventId: "asc" }] },
     } } },
   });
   const person = user?.linkedPerson;

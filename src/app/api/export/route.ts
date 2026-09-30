@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { loydOnlyWhere, parseLoydOnly } from "@/lib/loyd-filter";
 import { getUserPermissions } from "@/lib/permission-store";
+import { csvCell, gedcomText } from "@/lib/export-sanitize";
 
 /**
  * Data export endpoint. Supports CSV, JSON and GEDCOM (5.5.1) formats.
@@ -150,13 +151,6 @@ export async function GET(request: NextRequest) {
   });
 }
 
-function csvCell(value: string): string {
-  if (/[",\r\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
-
 type ExportPerson = {
   id: string;
   displayName: string;
@@ -176,7 +170,7 @@ function gedDate(d: { dateYear: number | null; dateExact: Date | null; dateText:
     return `${dt.getUTCDate()} ${GED_MONTHS[dt.getUTCMonth() + 1]} ${dt.getUTCFullYear()}`;
   }
   if (d.dateYear) return String(d.dateYear);
-  if (d.dateText) return d.dateText;
+  if (d.dateText) return gedcomText(d.dateText);
   return null;
 }
 
@@ -260,8 +254,8 @@ async function buildGedcom(people: ExportPerson[], personIds: Set<string>): Prom
   for (const p of people) {
     const id = xref.get(p.id)!;
     lines.push(`0 @${id}@ INDI`);
-    const given = [p.givenName1, p.givenName2, p.givenName3].filter(Boolean).join(" ");
-    const surname = p.surname ?? "";
+    const given = gedcomText([p.givenName1, p.givenName2, p.givenName3].filter(Boolean).join(" "));
+    const surname = gedcomText(p.surname ?? "");
     lines.push(`1 NAME ${given} /${surname}/`.trimEnd());
     if (given) lines.push(`2 GIVN ${given}`);
     if (surname) lines.push(`2 SURN ${surname}`);

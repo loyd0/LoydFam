@@ -5,7 +5,7 @@ import { auditedPrisma } from "@/lib/audited-prisma";
 import { setAuditContext } from "@/lib/audit";
 import { getProperty } from "@/lib/research-store";
 import { properties } from "@/lib/properties";
-import { validateResearch } from "@/lib/research-validation";
+import { assertPreservedResearchSections, validateResearch } from "@/lib/research-validation";
 import { displayNameFor, parseAmendmentNote, parsePersonPatch } from "@/lib/amendment-validation";
 import { isPlainObject } from "@/lib/permissions";
 
@@ -108,6 +108,8 @@ export async function reviewAmendment(
       catch { throw new AmendmentError("The proposed property fields are invalid.", 400); }
       const existing = await tx.propertyArticle.findUnique({ where: { slug: amendment.targetId } });
       if (String(existing?.version ?? 0) !== amendment.baseVersion) throw new AmendmentError("Property changed since this proposal. Review the current article before proceeding.", 409);
+      try { assertPreservedResearchSections(existing ? existing.content as unknown as typeof original : original, amendment.payload as unknown as typeof original); }
+      catch (error) { throw new AmendmentError(error instanceof Error ? error.message : "The proposal drops published research.", 409); }
       if (!existing) {
         await setAuditContext(tx, {}, "Initial recorded version of the previously published account. Earlier edit history is unavailable.");
         await tx.propertyArticle.create({ data: { slug: amendment.targetId, content: original as unknown as Prisma.InputJsonObject, version: 1 } });

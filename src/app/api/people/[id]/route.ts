@@ -2,7 +2,7 @@ import { mediaUrl } from "@/lib/media-url";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getProperties } from "@/lib/research-store";
+import { getPropertiesForPerson } from "@/lib/research-store";
 import { apiPermissionError } from "@/lib/permission-guards";
 import { getUserPermissions } from "@/lib/permission-store";
 
@@ -116,7 +116,7 @@ export async function GET(
   return NextResponse.json({
     ...person,
     events: person.events.map(link => ({ ...link, canEdit: session.user.role === "ADMIN" || (owned && link.event._count.personEvents === 1 && link.event._count.partnershipStarts === 0 && link.event._count.partnershipEnds === 0), event: { ...link.event, _count: undefined } })),
-    properties: permissions["properties.view"] ? (await getProperties()).filter(p => p.people.some(link => link.id === person.id)).map(({ slug, name, location }) => ({ slug, name, location })) : [],
+    properties: permissions["properties.view"] ? await getPropertiesForPerson(person.id) : [],
     mediaLinks: person.mediaLinks.map(link => ({ ...link, media: { ...link.media, blobUrl: mediaUrl(link.media.id), blobKey: undefined } })),
     notes: person.notes.map((note) => ({
       ...note,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import {
   Card,
@@ -37,14 +37,28 @@ export default function SettingsPage() {
   const [linkLoading, setLinkLoading] = useState(true);
   const [linkSaving, setLinkSaving] = useState(false);
   const [linkMessage, setLinkMessage] = useState("");
+  const linkSelectionVersion = useRef(0);
 
   useEffect(() => {
-    fetch("/api/account/linked-person").then((response) => response.ok ? response.json() : Promise.reject())
-      .then((data) => setLinkedPerson(data.person)).catch(() => setLinkMessage("Could not load your linked family person."))
-      .finally(() => setLinkLoading(false));
-  });
+    const controller = new AbortController();
+    const initialVersion = linkSelectionVersion.current;
+    fetch("/api/account/linked-person", { signal: controller.signal })
+      .then((response) => response.ok ? response.json() : Promise.reject())
+      .then((data) => {
+        if (!controller.signal.aborted && linkSelectionVersion.current === initialVersion) setLinkedPerson(data.person);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted && linkSelectionVersion.current === initialVersion) setLinkMessage("Could not load your linked family person.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLinkLoading(false);
+      });
+    return () => controller.abort();
+  }, []);
 
   async function saveLinkedPerson(person: PickedPerson | null) {
+    linkSelectionVersion.current += 1;
+    const saveVersion = linkSelectionVersion.current;
     const previous = linkedPerson;
     setLinkedPerson(person); setLinkMessage("");
     setLinkSaving(true);
@@ -54,11 +68,15 @@ export default function SettingsPage() {
         body: JSON.stringify({ personId: person?.id ?? null }),
       });
       if (!response.ok) throw new Error("Save failed");
-      setLinkMessage(person ? "Saved. Person tools will use this as your starting person." : "Cleared. Person tools will use their standard starting person.");
+      if (linkSelectionVersion.current === saveVersion) {
+        setLinkMessage(person ? "Saved. Person tools will use this as your starting person." : "Cleared. Person tools will use their standard starting person.");
+      }
     } catch {
-      setLinkedPerson(previous); setLinkMessage("Could not save your selection. Please try again.");
+      if (linkSelectionVersion.current === saveVersion) {
+        setLinkedPerson(previous); setLinkMessage("Could not save your selection. Please try again.");
+      }
     } finally {
-      setLinkSaving(false);
+      if (linkSelectionVersion.current === saveVersion) setLinkSaving(false);
     }
   }
 

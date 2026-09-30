@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/authz";
 import { setAuditContext } from "@/lib/audit";
-import { validateResearch } from "@/lib/research-validation";
+import { assertPreservedResearchSections, validateResearch } from "@/lib/research-validation";
 import { properties, type PropertyRecord } from "@/lib/properties";
 import { Prisma } from "@/generated/prisma/client";
 import { isDeepStrictEqual } from "node:util";
@@ -20,6 +20,7 @@ export async function saveProperty(slug: string, expectedVersion: number, conten
     const result = await prisma.$transaction(async tx => {
       const existing = await tx.propertyArticle.findUnique({ where: { slug } });
       if ((existing?.version ?? 0) !== expectedVersion) throw new Error("Someone has edited this page since you opened it. Your draft is still here; reload the page in another tab and compare before saving.");
+      assertPreservedResearchSections(existing ? existing.content as unknown as PropertyRecord : original, content);
       if (existing && isDeepStrictEqual(existing.content, content)) throw new Error("There are no changes to save.");
       if (!existing) {
         await setAuditContext(tx, {}, "Initial recorded version of the previously published account. Earlier edit history is unavailable.");

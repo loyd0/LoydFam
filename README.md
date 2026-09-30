@@ -74,7 +74,7 @@ Keep an encrypted off-device copy of database backups. Blob files require their 
 
 Retain Neon Postgres: the app depends on relational joins, PostgreSQL enums/arrays and trigram indexes. Moving to Cloudflare D1 would require SQLite adaptation. Cloudflare R2 remains a good future media option, especially if bandwidth or media volume grows. For this preview, repairing storage with a private London-region Blob store avoided a provider migration while delivering authenticated media and a verified original-source archive. File access is routed by media ID so storage URLs do not become the browser-facing contract.
 
-The private store is connected to preview/development. Production file access must be configured before a production promotion. Cloudflare email integration is installed, but sending remains pending the Namecheap nameserver switch, sending-domain activation, and restricted API token setup. Admins can share invitation links manually.
+The private store is connected to preview and production. Cloudflare DNS and the `notify.loyd.family` sending domain are active; restricted email credentials are configured in both deployment environments. A branded test message was accepted by Cloudflare on 30 September 2026. Admins can also share invitation links manually.
 
 ## Deploying
 

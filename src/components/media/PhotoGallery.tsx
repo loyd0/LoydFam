@@ -2,7 +2,6 @@
 
 import { useRef, useState, useTransition } from "react";
 import NextImage from "next/image";
-import { upload } from "@vercel/blob/client";
 import { AlertCircle, Download, FileText, Image as ImageIcon, ImagePlus, Loader2, Pencil, Save, Star, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { mediaUrl } from "@/lib/media-url";
@@ -59,19 +58,19 @@ export function PhotoGallery({ personId, mediaLinks, canEdit, onChange }: PhotoG
       setError("Choose a JPG, PNG, WebP, GIF, HEIC image, or PDF.");
       return;
     }
-    if (file.size <= 0 || file.size > 20 * 1024 * 1024) {
-      setError("Files must be smaller than 20 MB.");
+    if (file.size <= 0 || file.size > 4 * 1024 * 1024) {
+      setError("Files must be smaller than 4 MB.");
       return;
     }
 
     setUploading(true);
     try {
-      const pathname = `media/${personId}/${crypto.randomUUID()}.${extension}`;
-      const blob = await upload(pathname, file, {
-        access: "private",
-        handleUploadUrl: "/api/media/upload",
-        contentType: file.type,
-      });
+      const form = new FormData();
+      form.set("personId", personId);
+      form.set("file", file);
+      const response = await fetch("/api/media/upload", { method: "POST", body: form });
+      const result = await response.json() as { blobKey?: string; error?: string };
+      if (!response.ok || !result.blobKey) throw new Error(result.error || "Upload failed");
       let width: number | undefined;
       let height: number | undefined;
       if (file.type.startsWith("image/")) {
@@ -83,7 +82,7 @@ export function PhotoGallery({ personId, mediaLinks, canEdit, onChange }: PhotoG
           // Image dimensions are optional display metadata.
         }
       }
-      await attachMediaToPerson({ personId, blobKey: blob.pathname, width, height });
+      await attachMediaToPerson({ personId, blobKey: result.blobKey, width, height });
       onChange();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload failed";

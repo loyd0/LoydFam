@@ -6,6 +6,7 @@ import { parsePersonSearchQuery } from "@/lib/person-search";
 import type { Prisma } from "@/generated/prisma/client";
 import { findProperties } from "@/lib/research-store";
 import { getUserPermissions } from "@/lib/permission-store";
+import { searchDenialResponse } from "@/lib/search-access";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -25,9 +26,8 @@ export async function GET(request: NextRequest) {
   const numberQuery = parsedQuery.familyNumber;
   const identifierSearch = numberQuery !== null || (/^[A-Z0-9:#-]+$/i.test(q) && /\d/.test(q));
 
-  if (!canSearchPeople && !canSearchEvents && !canSearchProperties) {
-    return NextResponse.json({ people: [], events: [], properties: [] });
-  }
+  const denied = searchDenialResponse(canSearchPeople, canSearchEvents, canSearchProperties);
+  if (denied) return denied;
   if (!exactId && q.length < 2 && !identifierSearch) {
     return NextResponse.json({ people: [], events: [] });
   }

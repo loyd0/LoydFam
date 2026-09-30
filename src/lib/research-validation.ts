@@ -126,3 +126,12 @@ export function validateResearch(value: unknown, slug: string): asserts value is
 export function changedFields(before: Record<string, unknown>, after: Record<string, unknown>) {
   return [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((key) => !isDeepStrictEqual(before[key], after[key]));
 }
+
+/** An empty submitted section must not erase published research by accident. */
+export function assertPreservedResearchSections(current: PropertyRecord, proposed: PropertyRecord): void {
+  for (const section of ["paragraphs", "images", "people"] as const) {
+    if (current[section].length > 0 && proposed[section].length === 0) {
+      throw new Error(`The current article has ${section}. Preserve them in the draft before saving.`);
+    }
+  }
+}

@@ -60,7 +60,9 @@ export async function requestPasswordReset(email: string): Promise<{ message: st
     text,
   });
 
-  if (!delivery.sent) {
+  // A timeout can happen after the provider accepts the email. Keep this link
+  // usable until expiry, consumption, or a newer reset supersedes it.
+  if (!delivery.sent && !delivery.uncertain) {
     await prisma.passwordReset.updateMany({ where: { id: reset.id, usedAt: null }, data: { usedAt: new Date() } });
   }
 

@@ -432,7 +432,7 @@ model Media {
   id              String    @id @default(uuid())
   type            MediaType
   blobUrl         String
-  blobKey         String?
+  blobKey         String?   @unique
   mimeType        String?
   fileSize        Int?
   width           Int?

@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { del, get, head } from "@vercel/blob";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { auditedPrisma } from "@/lib/audited-prisma";
 import { requireOwnedPerson } from "@/lib/authz";
 import { logActivity } from "@/lib/activity";
 import { hasMediaSignature, mediaPathname } from "@/lib/media-url";
 
-const MAX_UPLOAD_SIZE = 20 * 1024 * 1024;
+const MAX_UPLOAD_SIZE = 4 * 1024 * 1024;
 
 interface AttachMediaInput {
   personId: string;
@@ -24,7 +25,7 @@ async function verifyPrivateUpload(personId: string, blobKey: string) {
 
   const metadata = await head(blobKey);
   if (metadata.pathname !== blobKey || metadata.size <= 0 || metadata.size > MAX_UPLOAD_SIZE) {
-    throw new Error("Uploaded file is missing or exceeds the 20 MB limit.");
+    throw new Error("Uploaded file is missing or exceeds the 4 MB limit.");
   }
   if (metadata.contentType !== path.mimeType) {
     throw new Error("File type does not match the uploaded file extension.");
@@ -59,42 +60,49 @@ export async function attachMediaToPerson(input: AttachMediaInput): Promise<{ me
   const session = await requireOwnedPerson(input.personId, "media.upload");
   const db = auditedPrisma(session.user, "Attach media to a family person");
   const verified = await verifyPrivateUpload(input.personId, input.blobKey);
-  const existing = await prisma.media.findFirst({ where: { blobKey: input.blobKey }, select: { id: true } });
-  if (existing) throw new Error("This uploaded file has already been attached.");
-
-  const media = await db.$transaction(async (tx) => {
-    const person = await tx.person.findUnique({ where: { id: input.personId }, select: { id: true } });
-    if (!person) throw new Error("Person not found.");
-    const existingLinksCount = await tx.mediaLink.count({
-      where: { entityType: "PERSON", entityId: input.personId },
+  let media;
+  try {
+    media = await db.$transaction(async (tx) => {
+      const person = await tx.person.findUnique({ where: { id: input.personId }, select: { id: true } });
+      if (!person) throw new Error("Person not found.");
+      const existing = await tx.media.findUnique({ where: { blobKey: input.blobKey }, select: { id: true } });
+      if (existing) throw new Error("This uploaded file has already been attached.");
+      const existingLinksCount = await tx.mediaLink.count({
+        where: { entityType: "PERSON", entityId: input.personId },
+      });
+      const existingPhotoCount = await tx.mediaLink.count({
+        where: { entityType: "PERSON", entityId: input.personId, media: { type: "PHOTO" } },
+      });
+      const record = await tx.media.create({
+        data: {
+          type: verified.mimeType === "application/pdf" ? "DOCUMENT" : "PHOTO",
+          blobUrl: verified.blobUrl,
+          blobKey: input.blobKey,
+          mimeType: verified.mimeType,
+          fileSize: verified.fileSize,
+          width: input.width ?? null,
+          height: input.height ?? null,
+          caption: input.caption?.trim().slice(0, 500) || null,
+          createdByUserId: session.user.id,
+        },
+      });
+      await tx.mediaLink.create({
+        data: {
+          mediaId: record.id,
+          entityType: "PERSON",
+          entityId: input.personId,
+          isPrimary: existingPhotoCount === 0 && verified.mimeType !== "application/pdf",
+          sortOrder: existingLinksCount,
+        },
+      });
+      return record;
     });
-    const existingPhotoCount = await tx.mediaLink.count({
-      where: { entityType: "PERSON", entityId: input.personId, media: { type: "PHOTO" } },
-    });
-    const record = await tx.media.create({
-      data: {
-        type: verified.mimeType === "application/pdf" ? "DOCUMENT" : "PHOTO",
-        blobUrl: verified.blobUrl,
-        blobKey: input.blobKey,
-        mimeType: verified.mimeType,
-        fileSize: verified.fileSize,
-        width: input.width ?? null,
-        height: input.height ?? null,
-        caption: input.caption?.trim().slice(0, 500) || null,
-        createdByUserId: session.user.id,
-      },
-    });
-    await tx.mediaLink.create({
-      data: {
-        mediaId: record.id,
-        entityType: "PERSON",
-        entityId: input.personId,
-        isPrimary: existingPhotoCount === 0 && verified.mimeType !== "application/pdf",
-        sortOrder: existingLinksCount,
-      },
-    });
-    return record;
-  });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new Error("This uploaded file has already been attached.");
+    }
+    throw error;
+  }
 
   const person = await prisma.person.findUnique({ where: { id: input.personId } });
   await logActivity({

@@ -9,6 +9,8 @@ export interface SendMailResult {
   /** Cloudflare accepted the recipient for delivery; this is not an inbox receipt. */
   sent: boolean;
   id?: string;
+  /** The request may have been accepted before the connection failed. */
+  uncertain?: boolean;
   error?: string;
   fallbackMessage?: string;
 }
@@ -83,6 +85,6 @@ export async function sendMail(options: SendMailOptions): Promise<SendMailResult
   } catch {
     // Do not automatically retry: a timed-out request might already have been accepted.
     console.error("[email] Cloudflare delivery request failed");
-    return { sent: false, error: "Email delivery could not be confirmed. Please try again later." };
+    return { sent: false, uncertain: true, error: "Email delivery could not be confirmed. Please try again later." };
   }
 }

@@ -3,17 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { loydOnlyWhere, parseLoydOnly } from "@/lib/loyd-filter";
 import { apiPermissionError } from "@/lib/permission-guards";
-
-interface AncestorNode {
-  id: string;
-  displayName: string;
-  gender: string;
-  birthYear: number | null;
-  deathYear: number | null;
-  isLiving: boolean;
-  pedigreePosition: number; // Ahnentafel position: 1=subject, then recorded parent links by slot.
-  relationshipType: string | null;
-}
+import { parseAncestorDepth, walkAncestors } from "@/lib/ancestor-walk";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -25,76 +15,30 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const personId = searchParams.get("personId");
-  const depthParam = searchParams.get("depth");
-  const requestedDepth = depthParam && depthParam !== "full" ? Number.parseInt(depthParam, 10) : null;
-  const depth = requestedDepth != null && Number.isFinite(requestedDepth) ? Math.max(1, requestedDepth) : null;
+  const depth = parseAncestorDepth(searchParams.get("depth"));
   const loydOnly = parseLoydOnly(searchParams);
 
   if (!personId) {
     return NextResponse.json({ error: "Missing personId" }, { status: 400 });
   }
 
-  // BFS up the tree using Ahnentafel numbering
-  const ancestors: AncestorNode[] = [];
-  const personCache = new Map<string, { id: string; displayName: string; gender: string; birthYear: number | null; deathYear: number | null; isLiving: boolean }>();
-
-  async function loadPerson(id: string) {
-    if (personCache.has(id)) return personCache.get(id)!;
-    const p = await prisma.person.findUnique({
-      where: { id },
+  const { ancestors, maxDepth } = await walkAncestors(personId, depth, {
+    people: ids => prisma.person.findMany({
+      where: { id: { in: ids } },
       select: {
-        id: true,
-        displayName: true,
-        gender: true,
+        id: true, displayName: true, gender: true,
         events: {
           where: { event: { type: { in: ["BIRTH", "DEATH"] } } },
           include: { event: { select: { type: true, dateYear: true } } },
-          take: 2,
+          orderBy: [{ event: { dateYear: "asc" } }, { eventId: "asc" }],
         },
       },
-    });
-    if (!p) return null;
-    const birth = p.events.find((e) => e.event.type === "BIRTH");
-    const death = p.events.find((e) => e.event.type === "DEATH");
-    const data = {
-      id: p.id,
-      displayName: p.displayName,
-      gender: p.gender,
-      birthYear: birth?.event.dateYear ?? null,
-      deathYear: death?.event.dateYear ?? null,
-      isLiving: !death,
-    };
-    personCache.set(id, data);
-    return data;
-  }
-
-  // Queue: [personId, ahnentafelNum, currentDepth]
-  const queue: [string, number, number, Set<string>, string | null][] = [[personId, 1, 0, new Set([personId]), null]];
-  let maxDepth = 0;
-
-  while (queue.length > 0) {
-    const [currentId, ahnNum, currentDepth, path, relationshipType] = queue.shift()!;
-    const person = await loadPerson(currentId);
-    if (!person) continue;
-
-    ancestors.push({ ...person, pedigreePosition: ahnNum, relationshipType });
-
-    maxDepth = Math.max(maxDepth, currentDepth);
-    if (depth != null && currentDepth >= depth) continue;
-
-    // Get parents
-    const parentRels = await prisma.parentChild.findMany({
-      where: { childId: currentId },
-      select: { parentId: true, type: true, parent: { select: { gender: true } } },
-    });
-
-    // Father = ahnNum*2, Mother = ahnNum*2+1
-    const father = parentRels.find((r) => r.parent.gender === "MALE");
-    const mother = parentRels.find((r) => r.parent.gender !== "MALE");
-
-    if (father && !path.has(father.parentId)) queue.push([father.parentId, ahnNum * 2, currentDepth + 1, new Set([...path, father.parentId]), father.type]);
-    if (mother && !path.has(mother.parentId)) queue.push([mother.parentId, ahnNum * 2 + 1, currentDepth + 1, new Set([...path, mother.parentId]), mother.type]);
-  }
+    }),
+    parents: childIds => prisma.parentChild.findMany({
+      where: { childId: { in: childIds } },
+      select: { childId: true, parentId: true, type: true, parent: { select: { gender: true } } },
+    }),
+  });
 
   // Also include root lookup for person selector (filtered by loydOnly)
   const rootsWhere = loydOnly
