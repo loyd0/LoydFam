@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { apiAnyPermissionError } from "@/lib/permission-guards";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const denied = await apiAnyPermissionError(["dashboard.view", "people.view"], session.user);
+  if (denied) return denied;
 
   // Use today's date (UTC)
   const now = new Date();

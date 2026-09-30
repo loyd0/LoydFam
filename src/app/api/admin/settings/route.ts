@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { auditedPrisma } from "@/lib/audited-prisma";
 import bcrypt from "bcryptjs";
+import { randomInt } from "node:crypto";
 
 function generateTempPassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   let password = "";
   for (let i = 0; i < 12; i++) {
-    password += chars[Math.floor(Math.random() * chars.length)];
+    password += chars[randomInt(chars.length)];
   }
   return password;
 }
@@ -59,6 +61,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const db = auditedPrisma(session.user, "Create account from admin settings");
   const body = await request.json();
   const email = body.email?.trim()?.toLowerCase();
   const role = body.role === "ADMIN" ? "ADMIN" : "VIEWER";
@@ -84,16 +87,15 @@ export async function POST(request: NextRequest) {
   const hash = await bcrypt.hash(tempPassword, 12);
 
   // Create the user + invite record in a transaction
-  const [user] = await prisma.$transaction([
-    prisma.user.create({
-      data: { email, name, passwordHash: hash, role },
-    }),
-    prisma.invite.upsert({
+  const user = await db.$transaction(async (tx) => {
+    const created = await tx.user.create({ data: { email, name, passwordHash: hash, role } });
+    await tx.invite.upsert({
       where: { email },
       update: { status: "ACCEPTED", role, invitedBy: session.user.id, usedAt: new Date() },
       create: { email, role, status: "ACCEPTED", invitedBy: session.user.id, usedAt: new Date() },
-    }),
-  ]);
+    });
+    return created;
+  });
 
   return NextResponse.json({
     success: true,
@@ -109,6 +111,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const db = auditedPrisma(session.user, "Change account role");
   const body = await request.json();
   const { userId, role } = body;
 
@@ -127,7 +130,7 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  const user = await prisma.user.update({
+  const user = await db.user.update({
     where: { id: userId },
     data: { role },
     select: { id: true, email: true, role: true },
@@ -143,6 +146,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const db = auditedPrisma(session.user, "Delete account");
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
 
@@ -161,7 +165,7 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
-  await prisma.user.delete({ where: { id: userId } });
+  await db.user.delete({ where: { id: userId } });
 
   return NextResponse.json({ success: true });
 }

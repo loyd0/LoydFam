@@ -1,0 +1,9 @@
+.git
+.verification
+.backups
+.research
+.env*
+*.xlsx
+.vscode
+node_modules
+.next

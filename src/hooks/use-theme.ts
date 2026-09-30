@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useSyncExternalStore } from "react";
 
 export type Theme = "light" | "dark" | "system";
 
@@ -23,14 +23,25 @@ function applyTheme(theme: Theme) {
   }
 }
 
+function subscribeSystemTheme(onChange: () => void) {
+  const query = window.matchMedia("(prefers-color-scheme: dark)");
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
 export function useTheme() {
+  const systemTheme = useSyncExternalStore(subscribeSystemTheme, getSystemTheme, () => "light" as const);
   const [theme, setThemeState] = useState<Theme>("system");
 
   // On mount, read the saved preference and apply it. We start from the
   // server-rendered default and update on the client to avoid a hydration
   // mismatch, so the setState here is intentional.
   useEffect(() => {
-    const saved = (localStorage.getItem(STORAGE_KEY) as Theme | null) ?? "system";
+    let saved: Theme = "system";
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored === "dark" || stored === "light") saved = stored;
+    } catch { /* Preferences are optional when storage is unavailable. */ }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setThemeState(saved);
     applyTheme(saved);
@@ -48,12 +59,12 @@ export function useTheme() {
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
-    localStorage.setItem(STORAGE_KEY, next);
+    try { localStorage.setItem(STORAGE_KEY, next); } catch { /* Keep this session usable. */ }
     applyTheme(next);
   }, []);
 
   const resolvedTheme: "light" | "dark" =
-    theme === "system" ? getSystemTheme() : theme;
+    theme === "system" ? systemTheme : theme;
 
   return { theme, setTheme, resolvedTheme };
 }

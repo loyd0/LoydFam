@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -31,6 +31,7 @@ interface ExistingEvent {
   dateText?: string | null;
   dateIsApprox?: boolean;
   description?: string | null;
+  locationText?: string | null;
 }
 
 interface Props {
@@ -41,21 +42,23 @@ interface Props {
 }
 
 export function EventDialog({ personId, existing, open, onOpenChange }: Props) {
+  const fieldId = useId();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [deleting, startDelete] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const initialExactDate = existing?.dateExact?.slice(0, 10) ?? "";
+  const initialExactParts = /^\d{4}-\d{2}-\d{2}$/.test(initialExactDate) ? initialExactDate.split("-") : null;
 
   const [type, setType] = useState<EventInput["type"]>(existing?.type ?? "BIRTH");
-  const [dateExact, setDateExact] = useState(
-    existing?.dateExact ? existing.dateExact.slice(0, 10) : "",
-  );
-  const [year, setYear] = useState(existing?.dateYear?.toString() ?? "");
-  const [month, setMonth] = useState(existing?.dateMonth?.toString() ?? "");
-  const [day, setDay] = useState(existing?.dateDay?.toString() ?? "");
+  const [dateExact, setDateExact] = useState(initialExactDate);
+  const [year, setYear] = useState(initialExactParts?.[0] ?? existing?.dateYear?.toString() ?? "");
+  const [month, setMonth] = useState(initialExactParts?.[1] ?? existing?.dateMonth?.toString() ?? "");
+  const [day, setDay] = useState(initialExactParts?.[2] ?? existing?.dateDay?.toString() ?? "");
   const [dateText, setDateText] = useState(existing?.dateText ?? "");
   const [isApprox, setIsApprox] = useState(existing?.dateIsApprox ?? false);
   const [description, setDescription] = useState(existing?.description ?? "");
+  const [locationText, setLocationText] = useState(existing?.locationText ?? "");
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -69,6 +72,7 @@ export function EventDialog({ personId, existing, open, onOpenChange }: Props) {
       dateText: dateText || null,
       dateIsApprox: isApprox,
       description: description || null,
+      locationText: locationText || null,
     };
     startTransition(async () => {
       try {
@@ -109,10 +113,11 @@ export function EventDialog({ personId, existing, open, onOpenChange }: Props) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Label htmlFor={`${fieldId}-type`} className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Type
             </Label>
             <select
+              id={`${fieldId}-type`}
               value={type}
               onChange={(e) => setType(e.target.value as EventInput["type"])}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -126,55 +131,67 @@ export function EventDialog({ personId, existing, open, onOpenChange }: Props) {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Label htmlFor={`${fieldId}-date-exact`} className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Exact date (if known)
             </Label>
-            <Input type="date" value={dateExact} onChange={(e) => setDateExact(e.target.value)} />
+            <Input id={`${fieldId}-date-exact`} type="date" value={dateExact} onChange={(e) => {
+              const value = e.target.value;
+              setDateExact(value);
+              if (value) {
+                const [newYear, newMonth, newDay] = value.split("-");
+                setYear(newYear); setMonth(newMonth); setDay(newDay);
+              }
+            }} />
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <Label htmlFor={`${fieldId}-date-year`} className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Year
               </Label>
               <Input
+                id={`${fieldId}-date-year`}
                 type="number"
+                min={1}
+                max={9999}
                 value={year}
-                onChange={(e) => setYear(e.target.value)}
+                onChange={(e) => { setYear(e.target.value); if (dateExact) setDateExact(""); }}
                 placeholder="1890"
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <Label htmlFor={`${fieldId}-date-month`} className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Month
               </Label>
               <Input
+                id={`${fieldId}-date-month`}
                 type="number"
                 min={1}
                 max={12}
                 value={month}
-                onChange={(e) => setMonth(e.target.value)}
+                onChange={(e) => { setMonth(e.target.value); if (dateExact) setDateExact(""); }}
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <Label htmlFor={`${fieldId}-date-day`} className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Day
               </Label>
               <Input
+                id={`${fieldId}-date-day`}
                 type="number"
                 min={1}
                 max={31}
                 value={day}
-                onChange={(e) => setDay(e.target.value)}
+                onChange={(e) => { setDay(e.target.value); if (dateExact) setDateExact(""); }}
               />
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Label htmlFor={`${fieldId}-date-text`} className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Free-text date (e.g. &ldquo;c. 1890&rdquo;)
             </Label>
-            <Input value={dateText} onChange={(e) => setDateText(e.target.value)} />
+            <Input id={`${fieldId}-date-text`} value={dateText} onChange={(e) => setDateText(e.target.value)} />
           </div>
 
           <label className="flex items-center gap-2 text-sm">
@@ -187,14 +204,29 @@ export function EventDialog({ personId, existing, open, onOpenChange }: Props) {
           </label>
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Label htmlFor={`${fieldId}-description`} className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Description
             </Label>
             <Textarea
+              id={`${fieldId}-description`}
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor={`${fieldId}-location`} className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Event location
+            </Label>
+            <Input
+              id={`${fieldId}-location`}
+              value={locationText}
+              maxLength={500}
+              onChange={(e) => setLocationText(e.target.value)}
+              placeholder="City, country, or the historical wording"
+            />
+            <p className="text-xs text-muted-foreground">Original wording is kept. Recognized city or country names receive a coarse map point.</p>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}

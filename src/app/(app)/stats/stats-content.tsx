@@ -37,15 +37,11 @@ import {
   Heart,
   Clock,
   TrendingUp,
-  Dna,
   BarChart3,
   Calendar,
   Flame,
-  MapPin,
   Baby,
   BookOpen,
-  Microscope,
-  FlaskConical,
   ShieldCheck,
   Activity,
 } from "lucide-react";
@@ -80,9 +76,11 @@ interface StatsData {
   topNames: { name: string; count: number }[];
   topSurnames: { name: string; count: number }[];
   generations: { generation: number; count: number }[];
+  namesByGeneration: { generation: number; name: string; count: number }[];
+  branches: { label: string; members: number; withBirthYear: number; withDeathRecord: number; generations: number }[];
   familyStructure: {
-    avgChildrenPerCouple: number;
-    totalCouplesWithChildren: number;
+    avgChildrenPerParent: number;
+    totalParentsWithChildren: number;
     childrenDistribution: { children: number; count: number }[];
     generationGap: { generation: number; avgGap: number; count: number }[];
   };
@@ -234,7 +232,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "population", label: "Population", icon: Users },
   { id: "longevity", label: "Longevity", icon: Activity },
   { id: "names", label: "Names", icon: BookOpen },
-  { id: "genetics", label: "Genetics & Family", icon: Dna },
+  { id: "genetics", label: "Family Structure", icon: Baby },
   { id: "quality", label: "Data Quality", icon: ShieldCheck },
 ];
 
@@ -284,7 +282,7 @@ function PopulationTab({ data }: { data: StatsData }) {
   return (
     <div className="space-y-6">
       {/* KPI tiles */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
         <StatTile
           label="Total People"
           value={data.population.total}
@@ -292,14 +290,14 @@ function PopulationTab({ data }: { data: StatsData }) {
           colour="text-[#1a4731]"
         />
         <StatTile
-          label="Living Members"
+          label="Likely Living"
           value={data.population.living}
           icon={Heart}
           colour="text-emerald-600"
-          sub={`${Math.round((data.population.living / data.population.total) * 100)}% of tree`}
+          sub={`${data.population.total ? Math.round((data.population.living / data.population.total) * 100) : 0}% with recent birth dates and no recorded death`}
         />
         <StatTile
-          label="Deceased"
+          label="Death Recorded"
           value={data.population.deceased}
           icon={Clock}
           colour="text-slate-500"
@@ -321,7 +319,7 @@ function PopulationTab({ data }: { data: StatsData }) {
               Births by Decade
             </CardTitle>
             <CardDescription>
-              Population growth wave of the Loyd family over {data.birthsByDecade.length} recorded decades
+              Recorded birth events by decade; repeated records for one person are counted once
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -395,10 +393,10 @@ function PopulationTab({ data }: { data: StatsData }) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Flame className="h-4 w-4 text-amber-500" />
-              Birth Seasonality
+              Birth Month Records
             </CardTitle>
             <CardDescription>
-              Monthly birth distribution — reveals pre-industrial agricultural and religious patterns
+              Distribution among people with a recorded birth month; dates and coverage may be incomplete
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -411,17 +409,7 @@ function PopulationTab({ data }: { data: StatsData }) {
                 <Bar dataKey="count" name="Births" fill={C.amber} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-            <InsightCard
-              icon={Microscope}
-              title="Seasonality Science"
-              colour="bg-amber-50 border-amber-200"
-              iconColour="text-amber-700"
-            >
-              Pre-industrial English families showed autumn/winter birth peaks (Sept–Jan), linked to spring
-              marriages and agricultural cycles. Deviation from this pattern suggests urbanisation or migration.
-              Studies of 17th–19th century English parish records show up to 30% more births in Q4 compared
-              to Q2.
-            </InsightCard>
+            <p className="text-xs text-muted-foreground">This chart describes recorded months only. It cannot establish seasonal causes, and incomplete month data can change the apparent distribution.</p>
           </CardContent>
         </Card>
       )}
@@ -432,7 +420,7 @@ function PopulationTab({ data }: { data: StatsData }) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Activity className="h-4 w-4 text-emerald-500" />
-              Age Distribution of Living Members
+              Age Estimate for People without Recorded Deaths
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -445,6 +433,7 @@ function PopulationTab({ data }: { data: StatsData }) {
                 <Bar dataKey="count" name="Living" fill={C.green4} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            <p className="text-xs text-muted-foreground">Estimated from recorded birth years within the last 110 years and no recorded death event. Missing death records mean this is an upper-bound proxy, not a verified living count.</p>
           </CardContent>
         </Card>
       )}
@@ -461,7 +450,7 @@ function LongevityTab({ data }: { data: StatsData }) {
     maleData && femaleData ? femaleData.avg - maleData.avg : null;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-5 sm:space-y-6">
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
@@ -500,18 +489,12 @@ function LongevityTab({ data }: { data: StatsData }) {
 
       {genderGap !== null && (
         <InsightCard
-          icon={Microscope}
-          title={`Gender Longevity Gap: ${Math.abs(genderGap)} years`}
+          icon={Users}
+          title={`Recorded average difference: ${Math.abs(genderGap)} years`}
           colour={genderGap > 0 ? "bg-rose-50 border-rose-200" : "bg-blue-50 border-blue-200"}
           iconColour={genderGap > 0 ? "text-rose-700" : "text-blue-700"}
         >
-          {genderGap > 0
-            ? `Women in the Loyd family outlive men by ${genderGap} years on average. `
-            : `Men in the Loyd family outlive women by ${Math.abs(genderGap)} years on average. `}
-          Modern UK data shows a female longevity advantage of ~3.7 years (ONS 2022). Historical
-          advantages were lower due to childbirth mortality — any deviation here is genealogically significant.
-          The female biological advantage is linked to oestrogen&rsquo;s cardioprotective effects and lower
-          baseline inflammation markers (Austad & Bartke, 2016).
+          In this subset with recorded birth and death years, the {genderGap > 0 ? "female" : "male"} group average is higher. This is a descriptive difference only; it may reflect small samples, uneven date coverage, and generations that are fully observed.
         </InsightCard>
       )}
 
@@ -525,7 +508,7 @@ function LongevityTab({ data }: { data: StatsData }) {
                 Age at Death Distribution
               </CardTitle>
               <CardDescription>
-                Mortality curve based on {data.longevity.sampleSize} individuals with known birth & death years
+                {data.longevity.sampleSize} people with recorded birth and death years; year-only age estimates
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -569,7 +552,19 @@ function LongevityTab({ data }: { data: StatsData }) {
                     tick={{ fontSize: 11 }}
                   />
                   <YAxis tick={{ fontSize: 11 }} unit=" yr" />
-                  <Tooltip content={<ChartTooltip unit=" yrs" />} />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const row = data.longevityByGeneration.find((item) => item.generation === Number(label));
+                    return (
+                      <div className="rounded-lg border bg-background/95 px-3 py-2 shadow-lg text-xs">
+                        <p className="font-medium">Generation {label}</p>
+                        <p>Mean recorded lifespan: <strong>{payload[0]?.value} years</strong></p>
+                        <p>People with recorded birth and death years: <strong>{row?.count ?? 0}</strong></p>
+                      </div>
+                    );
+                  }}
+                />
                   <Line
                     type="monotone"
                     dataKey="avgLifespan"
@@ -581,17 +576,7 @@ function LongevityTab({ data }: { data: StatsData }) {
                   />
                 </LineChart>
               </ResponsiveContainer>
-              <InsightCard
-                icon={FlaskConical}
-                title="Secular Longevity Trend"
-                colour="bg-emerald-50 border-emerald-200"
-                iconColour="text-emerald-700"
-              >
-                A persistent rise across generations reflects the global secular trend — average
-                human lifespan increased by ~2.5 years per decade in the 20th century (Oeppen &
-                Vaupel, 2002, Science). A flat or declining trend in later generations may indicate
-                data completeness issues (younger generations haven&apos;t yet died).
-              </InsightCard>
+              <p className="text-xs text-muted-foreground">Later generations are less likely to have completed lifespans recorded (right censoring), so generation averages are not directly comparable.</p>
             </CardContent>
           </Card>
         )}
@@ -703,7 +688,7 @@ function NamesTab({ data }: { data: StatsData }) {
               Top Surnames
             </CardTitle>
             <CardDescription>
-              Most common family names — reveals marriage patterns and lineage branches
+              Most frequent recorded family names
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -762,45 +747,37 @@ function NamesTab({ data }: { data: StatsData }) {
         </CardContent>
       </Card>
 
-      <InsightCard
-        icon={FlaskConical}
-        title="Naming Science: The Patrilineal Naming Effect"
-        colour="bg-blue-50 border-blue-200"
-        iconColour="text-blue-700"
-      >
-        Studies of pre-1900 British families show ~35% of firstborn sons received the father&apos;s
-        given name (Mateos et al., 2007). The dominance of names like &apos;William&apos;, &apos;John&apos;, and
-        &apos;Thomas&apos; in English genealogies reflects both patrilineal naming traditions and the
-        Norman/Saxon cultural legacy. A high frequency of one name (e.g., Loyd&apos;s ancestor William)
-        across multiple generations indicates strong descent-line naming conventions — a heritable cultural
-        trait studied in anthropological genetics (Guglielmino et al., 1995).
-      </InsightCard>
+      {data.namesByGeneration.length > 0 && (
+        <Card className="border-border/50 bg-card/80 backdrop-blur">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BookOpen className="h-4 w-4 text-[#266044]" />
+              Most Recorded Given Names by Generation
+            </CardTitle>
+            <CardDescription>Top three names within each recorded generation, with the count shown for context</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+              {data.namesByGeneration.map((row) => (
+                <div key={`${row.generation}-${row.name}`} className="flex items-center justify-between border-b border-border/40 py-2 text-sm">
+                  <span><span className="mr-2 text-muted-foreground">Gen {row.generation}</span>{row.name}</span>
+                  <span className="text-xs text-muted-foreground">{row.count}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">Generation labels come from the family tree’s recorded generation fields. Name spellings are grouped as entered.</p>
+          </CardContent>
+        </Card>
+      )}
 
-      <InsightCard
-        icon={MapPin}
-        title="Surname Diversity: A Marker of Migration"
-        colour="bg-purple-50 border-purple-200"
-        iconColour="text-purple-700"
-      >
-        The number of distinct surnames entering a lineage across generations directly tracks
-        geographic and social mobility. A rapid increase in unique surnames indicates out-marriage
-        into new communities — a marker of geographic expansion. Conversely, a stable, low-diversity
-        surname pool indicates endogamy (marrying within community), which is measurable as a form
-        of &apos;isolation by distance&apos; in population genetics (Wright, 1943).
-      </InsightCard>
+      <p className="text-xs text-muted-foreground">Name frequencies summarize the recorded names in this tree. They do not identify naming causes or migration patterns.</p>
     </div>
   );
 }
 
-// ─── GENETICS TAB ─────────────────────────────────────────────────────────────
+// ─── FAMILY STRUCTURE TAB ─────────────────────────────────────────────────────
 
 function GeneticsTab({ data }: { data: StatsData }) {
-  const uniqueSurnames = new Set(data.topSurnames.map((s) => s.name.toLowerCase())).size;
-  const totalPeople = data.population.total;
-  // Rough effective population size approximation from surname diversity
-  // Ne ≈ (unique surnames)^2 / (expected unique surnames under random mating)
-  const surnameRatio =
-    totalPeople > 0 ? Math.round((uniqueSurnames / totalPeople) * 100) : 0;
 
   // Marriage age data — pivot for chart
   const marriagePivot: Record<string, { label: string; MALE?: number; FEMALE?: number }> = {};
@@ -819,27 +796,18 @@ function GeneticsTab({ data }: { data: StatsData }) {
       {/* KPI tiles */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
-          label="Avg. Children / Couple"
-          value={data.familyStructure.avgChildrenPerCouple}
+          label="Avg. Linked Children / Parent"
+          value={data.familyStructure.avgChildrenPerParent}
           icon={Baby}
           colour="text-[#266044]"
-          sub="among couples with known children"
+          sub="among parents with at least one linked child"
         />
         <StatTile
-          label="Couples with Children"
-          value={data.familyStructure.totalCouplesWithChildren}
+          label="Parents with Linked Children"
+          value={data.familyStructure.totalParentsWithChildren}
           icon={Heart}
           colour="text-rose-500"
         />
-        <div className="col-span-1 rounded-xl border border-border/50 bg-card/80 backdrop-blur p-4 flex flex-col gap-1">
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Unique Surnames
-          </span>
-          <div className="text-2xl font-bold text-[#1a4731]">
-            <AnimatedNumber value={uniqueSurnames} />
-          </div>
-          <p className="text-xs text-muted-foreground">{surnameRatio}% of total population</p>
-        </div>
         <div className="col-span-1 rounded-xl border border-border/50 bg-card/80 backdrop-blur p-4 flex flex-col gap-1">
           <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Generation Span
@@ -851,6 +819,31 @@ function GeneticsTab({ data }: { data: StatsData }) {
         </div>
       </div>
 
+      {data.branches.length > 0 && (
+        <Card className="border-border/50 bg-card/80 backdrop-blur">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Users className="h-4 w-4 text-[#266044]" />
+              Branch Coverage Comparison
+            </CardTitle>
+            <CardDescription>Groups use the imported branch-root field. Counts describe tree records, with birth and death coverage shown for context.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {data.branches.map((branch) => (
+                <div key={branch.label} className="flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-border/40 py-2 text-sm">
+                  <span className="min-w-20 font-medium">{branch.label}</span>
+                  <span className="text-muted-foreground">{branch.members.toLocaleString()} people</span>
+                  <span className="text-muted-foreground">{branch.generations} generations</span>
+                  <span className="text-muted-foreground">{branch.withBirthYear.toLocaleString()} birth years</span>
+                  <span className="text-muted-foreground">{branch.withDeathRecord.toLocaleString()} death records</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Children per couple distribution */}
         {data.familyStructure.childrenDistribution.length > 0 && (
@@ -861,7 +854,7 @@ function GeneticsTab({ data }: { data: StatsData }) {
                 Family Size Distribution
               </CardTitle>
               <CardDescription>
-                Children per couple — higher numbers reflect pre-contraception fertility patterns
+              Recorded children linked to each parent. This is not a complete fertility measure.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -873,26 +866,16 @@ function GeneticsTab({ data }: { data: StatsData }) {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" strokeOpacity={0.5} />
                   <XAxis dataKey="children" tick={{ fontSize: 11 }} label={{ value: "Children", position: "insideBottom", offset: -3, fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} label={{ value: "Couples", angle: -90, position: "insideLeft", fontSize: 11 }} />
-                  <Tooltip content={<ChartTooltip unit=" couples" />} />
+                  <Tooltip content={<ChartTooltip unit=" parents" />} />
                   <Bar
                     dataKey="count"
-                    name="Couples"
+                    name="Parents"
                     fill={C.green4}
                     radius={[4, 4, 0, 0]}
                   />
                 </BarChart>
               </ResponsiveContainer>
-              <InsightCard
-                icon={Dna}
-                title="Fertility Science"
-                colour="bg-emerald-50 border-emerald-200"
-                iconColour="text-emerald-700"
-              >
-                Pre-1900 English families averaged 5–7 live births, with high infant mortality (~20%
-                before age 5). Modern-era couples average 1.8–2.2 children in England (ONS). A
-                bimodal distribution suggests the dataset spans both eras. Large families (7+) are
-                a genetic diversity amplifier — more offspring = broader allele spread.
-              </InsightCard>
+              <p className="text-xs text-muted-foreground">Only recorded parent-child links are counted; missing links and unrecorded children can make family sizes appear smaller.</p>
             </CardContent>
           </Card>
         )}
@@ -906,7 +889,7 @@ function GeneticsTab({ data }: { data: StatsData }) {
                 Generation Gap Trend
               </CardTitle>
               <CardDescription>
-                Average parent age at birth of child — tracks modernisation of family timing
+                Mean parent age at recorded child birth by generation (year-only dates)
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -934,17 +917,7 @@ function GeneticsTab({ data }: { data: StatsData }) {
                   />
                 </LineChart>
               </ResponsiveContainer>
-              <InsightCard
-                icon={FlaskConical}
-                title="Generational Timing"
-                colour="bg-teal-50 border-teal-200"
-                iconColour="text-teal-700"
-              >
-                Historically, English women married at ~22–24 years (pre-1900). Modern UK averages
-                are ~31 years (ONS 2022). A rising generation gap across the tree directly mirrors this
-                demographic transition — suggesting the dataset captures multiple centuries of change.
-                Earlier marriages also correlate with higher lifetime fertility (Barclay & Kolk, 2017).
-              </InsightCard>
+              <p className="text-xs text-muted-foreground">Sample sizes vary by generation. Incomplete and year-only dates limit precision; this pattern alone does not explain why timing changed.</p>
             </CardContent>
           </Card>
         )}
@@ -959,7 +932,7 @@ function GeneticsTab({ data }: { data: StatsData }) {
               Marriage Age Distribution (by Gender)
             </CardTitle>
             <CardDescription>
-              Age at first marriage — one of the strongest demographic indicators of era and social class
+              Recorded partnership start age, using exact marriage dates and birth years where available
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -983,11 +956,11 @@ function GeneticsTab({ data }: { data: StatsData }) {
         <Card className="border-border/50 bg-card/80 backdrop-blur">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Dna className="h-4 w-4 text-purple-500" />
+              <Users className="h-4 w-4 text-purple-500" />
               Surname Diversity by Generation
             </CardTitle>
             <CardDescription>
-              Unique surnames entering each generation — a proxy for genetic admixture and exogamy
+              Distinct recorded surnames and people with surnames by generation
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1016,19 +989,7 @@ function GeneticsTab({ data }: { data: StatsData }) {
                 <Bar dataKey="uniqueSurnames" name="Unique Surnames" fill="#7c5cbf" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-            <InsightCard
-              icon={Dna}
-              title="Effective Population Size (Ne) Estimation"
-              colour="bg-purple-50 border-purple-200"
-              iconColour="text-purple-700"
-            >
-              Surname diversity is used as a proxy for genetic diversity in isolated populations
-              (Jobling, 2001; Lasker, 1985). A diversity ratio &gt; 0.5 indicates good outbreeding.
-              A declining ratio across generations may indicate drift toward endogamy (cousin marriage),
-              which increases the coefficient of inbreeding (F) — raising risk of expressing recessive
-              traits. Small effective population sizes (Ne &lt; 50) are considered a conservation concern
-              in ecology and can apply analogously to isolated human lineages.
-            </InsightCard>
+            <p className="text-xs text-muted-foreground">Surname counts reflect recorded names only. They do not measure genetic diversity, relatedness, inbreeding, or migration.</p>
           </CardContent>
         </Card>
       )}
@@ -1082,7 +1043,7 @@ function QualityTab({ data }: { data: StatsData }) {
     },
   ];
 
-  const overallScore = Math.round(
+  const averageFieldCoverage = Math.round(
     completenessItems.reduce((s, i) => s + i.pct, 0) / completenessItems.length
   );
 
@@ -1093,23 +1054,11 @@ function QualityTab({ data }: { data: StatsData }) {
         <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur p-5 flex flex-col items-center justify-center text-center">
           <div
             className="text-5xl font-black mb-1"
-            style={{ color: overallScore >= 70 ? C.green2 : overallScore >= 40 ? C.amber : C.rose }}
+            style={{ color: C.green2 }}
           >
-            {overallScore}%
+            {averageFieldCoverage}%
           </div>
-          <p className="text-sm text-muted-foreground">Overall Completeness Score</p>
-          <Badge
-            className="mt-2"
-            variant={overallScore >= 70 ? "default" : "secondary"}
-          >
-            {overallScore >= 80
-              ? "Excellent"
-              : overallScore >= 60
-              ? "Good"
-              : overallScore >= 40
-              ? "Fair"
-              : "Needs Work"}
-          </Badge>
+          <p className="text-sm text-muted-foreground">Mean of five field coverage rates</p>
         </div>
         <StatTile
           label="Total People Tracked"
@@ -1199,18 +1148,15 @@ function QualityTab({ data }: { data: StatsData }) {
       </div>
 
       <InsightCard
-        icon={Microscope}
-        title="Why Data Completeness Matters for Genealogical Research"
+        icon={Activity}
+        title="Coverage and interpretation"
         colour="bg-slate-50 border-slate-200"
         iconColour="text-slate-600"
       >
-        Research accuracy in family history studies is directly dependent on completeness metrics.
-        A birth date coverage below 60% significantly limits the ability to calculate lifespans,
-        generational gaps, and population cohort analysis. Studies in record linkage (Christen &
-        Goiser, 2007) recommend &gt;80% field completeness for statistical validity. Missing parent
-        links break inheritance chains, making genetic coefficient calculations impossible.
-        Prioritise importing death records and parent links to unlock the longevity and genetics
-        analysis sections of this dashboard.
+        Each percentage uses all non-placeholder people as its denominator. Death-date coverage
+        should be read carefully because many living people have no death event; absent records do
+        not prove that a person is living. Analyses use recorded years, so they are approximate and
+        can be affected by missing or conflicting records.
       </InsightCard>
     </div>
   );
@@ -1275,16 +1221,16 @@ export default function StatsContent() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Family Analytics</h1>
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Family Analytics</h1>
           <p className="mt-1 text-muted-foreground">
             Deep analysis of{" "}
             <strong className="text-foreground">
               {data.population.total.toLocaleString()}
             </strong>{" "}
-            people across {data.generations.length} generations — science-backed insights into
-            demography, genetics & family structure.
+            people across {data.generations.length} recorded generations — summaries of births,
+            lifespans, names, and family structure.
           </p>
         </div>
         <Badge variant="secondary" className="shrink-0 mt-1">
@@ -1293,7 +1239,7 @@ export default function StatsContent() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex flex-wrap gap-2 border-b border-border/50 pb-0">
+      <div role="tablist" aria-label="Analytics sections" className="flex min-w-0 flex-nowrap gap-1 overflow-x-auto border-b border-border/50 pb-0 -mx-3 px-3 sm:mx-0 sm:flex-wrap sm:gap-2 sm:px-0">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -1301,7 +1247,9 @@ export default function StatsContent() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border border-b-0 transition-all ${
+              role="tab"
+              aria-selected={active}
+              className={`flex min-h-12 shrink-0 items-center gap-2 px-3 py-2.5 text-sm font-medium rounded-t-lg border border-b-0 transition-all sm:px-4 ${
                 active
                   ? "bg-card border-border/50 text-foreground shadow-sm -mb-px pb-[1px] border-b-transparent"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -1315,7 +1263,7 @@ export default function StatsContent() {
       </div>
 
       {/* Tab content */}
-      <div>
+      <div className="min-w-0">
         {activeTab === "population" && <PopulationTab data={data} />}
         {activeTab === "longevity" && <LongevityTab data={data} />}
         {activeTab === "names" && <NamesTab data={data} />}

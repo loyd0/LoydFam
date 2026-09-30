@@ -173,6 +173,7 @@ export default function TimelinePage() {
                     From: {yearFrom}
                   </label>
                   <input
+                    aria-label="Start year"
                     type="range"
                     min={MIN_YEAR}
                     max={MAX_YEAR}
@@ -194,6 +195,7 @@ export default function TimelinePage() {
                     To: {yearTo}
                   </label>
                   <input
+                    aria-label="End year"
                     type="range"
                     min={MIN_YEAR}
                     max={MAX_YEAR}
@@ -247,7 +249,7 @@ export default function TimelinePage() {
                   <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-background bg-card shadow-sm">
                     <EventIcon type={event.type} />
                   </div>
-                  <Card className="flex-1 border-border/50 bg-card/80 backdrop-blur group-hover:bg-card/90 transition-all duration-200 group-hover:shadow-sm">
+                  <Card className="min-w-0 flex-1 border-border/50 bg-card/80 backdrop-blur group-hover:bg-card/90 transition-all duration-200 group-hover:shadow-sm">
                     <CardContent className="flex items-center gap-3 py-3 px-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -264,7 +266,7 @@ export default function TimelinePage() {
                             <Link
                               key={person.id}
                               href={`/people/${person.id}`}
-                              className="text-sm font-medium hover:text-primary hover:underline transition-colors"
+                              className="inline-flex min-h-11 items-center break-words text-sm font-medium hover:text-primary hover:underline transition-colors"
                             >
                               {person.displayName}
                             </Link>
@@ -288,6 +290,7 @@ export default function TimelinePage() {
             <Button
               size="sm"
               variant="outline"
+              aria-label="Previous page"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
             >
@@ -296,6 +299,7 @@ export default function TimelinePage() {
             <Button
               size="sm"
               variant="outline"
+              aria-label="Next page"
               onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
               disabled={page >= data.totalPages}
             >

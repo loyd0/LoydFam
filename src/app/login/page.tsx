@@ -11,7 +11,8 @@ import { Loader2, AlertCircle } from "lucide-react";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const requestedPath = searchParams.get("callbackUrl") || "/";
+  const callbackUrl = requestedPath.startsWith("/") && !requestedPath.startsWith("//") ? requestedPath : "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -57,7 +58,9 @@ function LoginForm() {
           onChange={(e) => setEmail(e.target.value)}
           className="text-sm focus-visible:ring-primary h-11"
           required
-          autoFocus
+          autoComplete="username"
+          inputMode="email"
+          autoCapitalize="none"
         />
       </div>
       <div className="space-y-2">
@@ -65,6 +68,7 @@ function LoginForm() {
           Password
         </Label>
         <Input
+          autoComplete="current-password"
           id="password"
           type="password"
           placeholder="••••••••"
@@ -98,7 +102,7 @@ function LoginForm() {
       </Button>
 
       <p className="text-center text-xs text-muted-foreground pt-2">
-        <a href="/forgot-password" className="underline underline-offset-2 hover:text-foreground">
+        <a href="/forgot-password" className="inline-flex min-h-11 items-center underline underline-offset-2 hover:text-foreground">
           Forgot password?
         </a>
       </p>
@@ -108,11 +112,11 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-dvh bg-background">
 
       {/* ── Left / single column: form ────────────────────────── */}
       <div className="flex w-full flex-col lg:w-1/2">
-        <div className="flex flex-1 items-center justify-center px-6 py-12 sm:px-12">
+        <div className="flex flex-1 items-center justify-center px-4 py-6 sm:px-12 sm:py-12">
           <div className="w-full max-w-sm space-y-6">
 
             {/* Mobile: crest above the form */}
@@ -136,7 +140,7 @@ export default function LoginPage() {
             </div>
 
             {/* Form card */}
-            <div className="bg-card border border-border shadow-sm rounded-xl p-6 sm:p-8">
+            <div className="bg-card border border-border shadow-sm rounded-xl p-4 sm:p-8">
               <Suspense fallback={
                 <div className="w-full space-y-4 animate-pulse">
                   <div className="h-10 bg-muted/30 rounded w-full" />

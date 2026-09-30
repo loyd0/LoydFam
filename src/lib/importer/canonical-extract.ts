@@ -698,9 +698,25 @@ function extractHatchMatch(sheet: SheetData, result: CanonicalData) {
 
     const externalId = String(loydNum);
     const primaryKey = `LOYD:${externalId}`;
+    const rowKnownAs = str(row["Known as"]) || str(row["KNOWN AS"]);
 
     // This sheet supplements — only create the person if not already present
     const existing = result.people.find((p) => p.primaryExternalKey === primaryKey);
+    if (existing) {
+      // Keep the primary sheet's values, filling gaps from this exact-key match.
+      // The source commonly stores aliases only in Hatch&Match Details.
+      const givenName = str(row["1st Name"]);
+      existing.surname ||= str(row["Surname"]);
+      existing.givenName1 ||= givenName;
+      existing.givenName2 ||= str(row["2nd Name"]);
+      existing.givenName3 ||= str(row["3rd Name"]);
+      existing.knownAs ||= rowKnownAs;
+      if (rowKnownAs && (!existing.preferredName || existing.preferredName === existing.givenName1)) {
+        existing.preferredName = rowKnownAs;
+      }
+      if (existing.gender === "UNKNOWN") existing.gender = resolveGender(row["Sex"] || row["SEX"], existing.givenName1);
+      existing.legacyGeneration ??= num(row["GENERATION"]);
+    }
     if (!existing) {
       // Thomas (-1) and any others not in the main list
       const surname = str(row["Surname"]);
@@ -716,8 +732,8 @@ function extractHatchMatch(sheet: SheetData, result: CanonicalData) {
         givenName1: gn1,
         givenName2: str(row["2nd Name"]),
         givenName3: str(row["3rd Name"]),
-        knownAs: str(row["Known as"]) || str(row["KNOWN AS"]),
-        preferredName: str(row["Known as"]) || gn1,
+        knownAs: rowKnownAs,
+        preferredName: rowKnownAs || gn1,
         displayName: str(row["KNOWN AS"]) || buildDisplayName(gn1, surname, externalId, row["Year of Birth"], row["Year of Death"]),
         gender,
         isPlaceholder: false,
@@ -828,7 +844,7 @@ export function extractCanonical(sheets: SheetData[]): CanonicalData {
   };
 
   // Process in a specific order to ensure enrichment works
-  const orderedSheets = [
+const orderedSheets = [
     "Loyd List 1-190 - Edit",
     "All Girls & Descendants",
     "Women from #85 onwards",  // Additional girls/descendants data
@@ -837,7 +853,11 @@ export function extractCanonical(sheets: SheetData[]): CanonicalData {
     "Updated Bios & Spouse Details",
     "BiographyMarriageDetsCountries",
     "Contacts",
-  ];
+];
+
+// Generations&Photos- CostsAT1 is intentionally not an extractor: its Photo
+// field is a status code (the sheet note says 1=yes, 2=died young), not a
+// per-person expected-photo count. Other observed codes are undocumented.
 
   for (const sheetName of orderedSheets) {
     const sheet = sheets.find((s) => s.sheetName === sheetName);

@@ -1,0 +1,7 @@
+CREATE TABLE "permission_policies" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "defaults" JSONB NOT NULL,
+  "overrides" JSONB NOT NULL,
+  "version" INTEGER NOT NULL DEFAULT 0,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

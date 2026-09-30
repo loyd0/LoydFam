@@ -1,7 +1,10 @@
+import { getBookRoot } from "@/lib/default-person";
+import { mediaUrl } from "@/lib/media-url";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseLoydOnly } from "@/lib/loyd-filter";
+import { apiAnyPermissionError } from "@/lib/permission-guards";
 
 // Surnames considered "Loyd lineage" for the direct filter
 const LOYD_SURNAMES = new Set(["LOYD", "LLOYD", "LOYD-DAVIES", "LOYD DAVIES", "CORMACK-LOYD", "LOYD (CHARLTON)"]);
@@ -18,10 +21,14 @@ export async function GET(request: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const denied = await apiAnyPermissionError(["tree.view", "mindmap.view"], session.user);
+  if (denied) return denied;
 
   const { searchParams } = new URL(request.url);
   const rootId = searchParams.get("root");
-  const depth = Math.min(10, Math.max(1, parseInt(searchParams.get("depth") || "4", 10)));
+  const depthParam = searchParams.get("depth");
+  const requestedDepth = depthParam && depthParam !== "full" ? Number.parseInt(depthParam, 10) : null;
+  const depth = requestedDepth != null && Number.isFinite(requestedDepth) ? Math.max(1, requestedDepth) : null;
   const loydOnly = parseLoydOnly(searchParams);
   // loydOnly forces direct lineage; explicit param can still override to "full"
   const lineage = loydOnly && searchParams.get("lineage") !== "full"
@@ -36,27 +43,25 @@ export async function GET(request: NextRequest) {
       select: { id: true, displayName: true, primaryExternalKey: true, surname: true },
     });
   } else {
-    rootPerson = await prisma.person.findFirst({
-      where: { isPlaceholder: false, legacyGeneration: { not: null } },
-      orderBy: { legacyGeneration: "asc" },
-      select: { id: true, displayName: true, primaryExternalKey: true, surname: true },
-    });
+    rootPerson = await getBookRoot();
   }
-
   if (!rootPerson) {
-    return NextResponse.json({ nodes: [], edges: [], roots: [] });
+    return NextResponse.json({ nodes: [], edges: [], roots: [], rootId: null, needsRoot: true });
   }
 
   // Get all available root options
   const roots = await prisma.person.findMany({
     where: { isPlaceholder: false },
     orderBy: [{ legacyGeneration: "asc" }, { displayName: "asc" }],
-    take: 200,
     select: {
       id: true,
       displayName: true,
       legacyGeneration: true,
       generationFromWilliam: true,
+      externalId: true,
+      sourceSystem: true,
+      gender: true,
+      events: { where: { event: { type: { in: ["BIRTH", "DEATH"] } } }, select: { event: { select: { type: true, dateYear: true } } }, take: 2 },
     },
   });
 
@@ -88,11 +93,12 @@ export async function GET(request: NextRequest) {
 
   const edges: TreeEdge[] = [];
   const allPersonIds = new Set<string>([rootPerson.id]);
+  let maxDepth = 0;
 
   // BFS by depth level — one query per level
   let currentLevelIds = [rootPerson.id];
 
-  for (let d = 0; d < depth && currentLevelIds.length > 0; d++) {
+  for (let d = 0; currentLevelIds.length > 0 && (depth == null || d < depth); d++) {
     // In direct mode, only expand Loyd-lineage nodes further
     const expandIds =
       lineage === "direct"
@@ -111,10 +117,12 @@ export async function GET(request: NextRequest) {
 
     const nextLevelIds: string[] = [];
     for (const rel of childRels) {
-      // Always add child as a node and edge (so non-Loyd leaf nodes are visible)
-      edges.push({ parentId: rel.parentId, childId: rel.childId });
+      // Keep a cycle-free spanning tree: repeated nodes would make recursive
+      // layouts expand forever and can create exponential duplicate branches.
       if (!allPersonIds.has(rel.childId)) {
         allPersonIds.add(rel.childId);
+        edges.push({ parentId: rel.parentId, childId: rel.childId });
+        maxDepth = d + 1;
         // In direct mode, only queue Loyd-lineage children for further expansion
         if (lineage === "full" || directLoydIds.has(rel.childId)) {
           nextLevelIds.push(rel.childId);
@@ -154,6 +162,12 @@ export async function GET(request: NextRequest) {
       primaryExternalKey: true,
       legacyGeneration: true,
       generationFromWilliam: true,
+      mediaLinks: {
+        where: { entityType: "PERSON", media: { type: "PHOTO" } },
+        orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
+        take: 1,
+        select: { media: { select: { id: true } } },
+      },
       events: {
         include: { event: true },
         where: { event: { type: { in: ["BIRTH", "DEATH"] } } },
@@ -196,6 +210,7 @@ export async function GET(request: NextRequest) {
       deathYear: death?.event.dateYear ?? null,
       isLiving: !death,
       generation: p.legacyGeneration ?? p.generationFromWilliam ?? null,
+      photoUrl: p.mediaLinks[0] ? mediaUrl(p.mediaLinks[0].media.id) : null,
       spouseNames: spouseNames.get(p.id) ?? [],
       isLoyd,  // flag so the UI can visually distinguish non-Loyd leaf nodes
     };
@@ -205,11 +220,17 @@ export async function GET(request: NextRequest) {
     nodes,
     edges,
     rootId: rootPerson.id,
+    maxDepth,
     lineage,
     roots: roots.map((r) => ({
       id: r.id,
       displayName: r.displayName,
+      gender: r.gender,
+      externalId: r.externalId,
+      sourceSystem: r.sourceSystem,
       generation: r.legacyGeneration ?? r.generationFromWilliam,
+      birthYear: r.events.find((entry) => entry.event.type === "BIRTH")?.event.dateYear ?? null,
+      deathYear: r.events.find((entry) => entry.event.type === "DEATH")?.event.dateYear ?? null,
     })),
   });
 }

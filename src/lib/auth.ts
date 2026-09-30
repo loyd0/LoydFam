@@ -50,12 +50,22 @@ const nextAuth = NextAuth({
         token.id = user.id!;
         token.role = (user as { role?: string }).role ?? "VIEWER";
       }
+      if (token.id) {
+        const current = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { role: true, linkedPersonId: true },
+        });
+        if (!current) return null;
+        token.role = current.role;
+        token.linkedPersonId = current.linkedPersonId;
+      }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as string;
+        session.user.linkedPersonId = (token.linkedPersonId as string | null) ?? null;
       }
       return session;
     },

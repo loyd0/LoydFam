@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import {
   Card,
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { PersonPicker, type PickedPerson } from "@/components/people/PersonPicker";
 import {
   Lock,
   CheckCircle2,
@@ -32,6 +33,52 @@ export default function SettingsPage() {
     success: boolean;
     message: string;
   } | null>(null);
+  const [linkedPerson, setLinkedPerson] = useState<PickedPerson | null>(null);
+  const [linkLoading, setLinkLoading] = useState(true);
+  const [linkSaving, setLinkSaving] = useState(false);
+  const [linkMessage, setLinkMessage] = useState("");
+  const linkSelectionVersion = useRef(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const initialVersion = linkSelectionVersion.current;
+    fetch("/api/account/linked-person", { signal: controller.signal })
+      .then((response) => response.ok ? response.json() : Promise.reject())
+      .then((data) => {
+        if (!controller.signal.aborted && linkSelectionVersion.current === initialVersion) setLinkedPerson(data.person);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted && linkSelectionVersion.current === initialVersion) setLinkMessage("Could not load your linked family person.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLinkLoading(false);
+      });
+    return () => controller.abort();
+  }, []);
+
+  async function saveLinkedPerson(person: PickedPerson | null) {
+    linkSelectionVersion.current += 1;
+    const saveVersion = linkSelectionVersion.current;
+    const previous = linkedPerson;
+    setLinkedPerson(person); setLinkMessage("");
+    setLinkSaving(true);
+    try {
+      const response = await fetch("/api/account/linked-person", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ personId: person?.id ?? null }),
+      });
+      if (!response.ok) throw new Error("Save failed");
+      if (linkSelectionVersion.current === saveVersion) {
+        setLinkMessage(person ? "Saved. Person tools will use this as your starting person." : "Cleared. Person tools will use their standard starting person.");
+      }
+    } catch {
+      if (linkSelectionVersion.current === saveVersion) {
+        setLinkedPerson(previous); setLinkMessage("Could not save your selection. Please try again.");
+      }
+    } finally {
+      if (linkSelectionVersion.current === saveVersion) setLinkSaving(false);
+    }
+  }
 
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -92,13 +139,13 @@ export default function SettingsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold">
               {(session?.user?.name || session?.user?.email || "?")[0]?.toUpperCase()}
             </div>
-            <div className="flex-1">
-              <p className="font-medium">{session?.user?.name || "—"}</p>
-              <p className="text-sm text-muted-foreground">
+            <div className="min-w-0 flex-1">
+              <p className="break-words font-medium">{session?.user?.name || "—"}</p>
+              <p className="break-all text-sm text-muted-foreground">
                 {session?.user?.email}
               </p>
             </div>
@@ -110,6 +157,18 @@ export default function SettingsPage() {
               {session?.user?.role || "VIEWER"}
             </Badge>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/50 bg-card/80 backdrop-blur">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base"><User className="h-4 w-4 text-chart-2" />This is me</CardTitle>
+          <CardDescription>Choose the family record that represents you. Family tools use it as their starting person. An administrator separately confirms ownership before you can edit that record directly.</CardDescription>
+        </CardHeader>
+        <CardContent className="max-w-xl space-y-2">
+          {linkLoading ? <p className="text-sm text-muted-foreground">Loading your selection…</p> : <PersonPicker value={linkedPerson} onChange={saveLinkedPerson} label="Choose who you are in the family" disabled={linkSaving} />}
+          {linkSaving && <p role="status" className="text-xs text-muted-foreground">Saving your selection…</p>}
+          {linkMessage && <p role="status" className="text-xs text-muted-foreground">{linkMessage}</p>}
         </CardContent>
       </Card>
 

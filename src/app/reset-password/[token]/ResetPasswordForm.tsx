@@ -57,9 +57,9 @@ export function ResetPasswordForm({ token, email }: Props) {
         <Input
           id="rp-password"
           type="password"
+          autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          autoFocus
           minLength={8}
           required
         />
@@ -71,6 +71,7 @@ export function ResetPasswordForm({ token, email }: Props) {
         <Input
           id="rp-confirm"
           type="password"
+          autoComplete="new-password"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
           required

@@ -1,6 +1,6 @@
 "use client";
 
-import { Moon, Sun, Monitor } from "lucide-react";
+import { Moon, Sun, Monitor, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,22 +11,26 @@ import {
 import { useTheme } from "@/hooks/use-theme";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
 
-/** Search ⌘K button — dispatches a synthetic keyboard event for the command palette. */
+/** Search action, available on touch and keyboard layouts. */
 function SearchButton() {
   return (
-    <button
-      className="hidden md:flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/60 transition-colors cursor-pointer select-none"
+    <Button
+      type="button"
+      variant="outline"
+      aria-label="Search the family archive"
+      className="size-11 shrink-0 gap-2 border-border/60 bg-muted/40 p-0 text-xs text-muted-foreground transition-colors hover:bg-muted/60 md:h-9 md:w-auto md:px-3 md:py-1.5"
       onClick={() =>
         window.dispatchEvent(
           new KeyboardEvent("keydown", { metaKey: true, key: "k", bubbles: true })
         )
       }
     >
-      <span>Search</span>
-      <kbd className="pointer-events-none inline-flex h-4 select-none items-center gap-0.5 rounded border bg-background px-1 font-mono text-[9px]">
+      <Search aria-hidden="true" className="size-4 md:hidden" />
+      <span className="hidden md:inline">Search</span>
+      <kbd className="pointer-events-none hidden h-4 select-none items-center gap-0.5 rounded border bg-background px-1 font-mono text-[9px] md:inline-flex">
         <span>⌘</span>K
       </kbd>
-    </button>
+    </Button>
   );
 }
 
@@ -37,7 +41,7 @@ function ThemeToggle() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Toggle theme">
+        <Button variant="ghost" size="icon" className="size-11 shrink-0 sm:size-9" aria-label="Toggle theme">
           {resolvedTheme === "dark" ? (
             <Moon className="h-4 w-4" />
           ) : (

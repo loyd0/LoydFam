@@ -9,27 +9,28 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { PersonPicker, type PickedPerson } from "@/components/people/PersonPicker";
 import { TreePine, Minus, Plus } from "lucide-react";
 import {
   FamilyTreeCanvas,
   type TreeData as CanvasTreeData,
 } from "@/components/family-tree-canvas";
+import { FamilyTree3D } from "@/components/family-tree-3d";
 
 interface RootOption {
   id: string;
   displayName: string;
   generation: number | null;
+  gender: string;
+  birthYear: number | null;
+  deathYear: number | null;
+  externalId: string | null;
+  sourceSystem: string | null;
 }
 
 interface TreeData extends CanvasTreeData {
   roots: RootOption[];
+  maxDepth: number;
 }
 
 // ─── Main page ────────────────────────────────────────────────
@@ -37,10 +38,25 @@ export default function TreePage() {
   const { isLoydOnly } = useViewMode();
   const [treeData, setTreeData] = useState<TreeData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedRoot, setSelectedRoot] = useState<string>("");
-  const [depth, setDepth] = useState(4);
+  const [selectedRoot, setSelectedRoot] = useState<string>(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("root") ?? "");
+  const [depth, setDepth] = useState<number | null>(null);
   // Default to 'direct' when loydOnly is active
   const [lineage, setLineage] = useState<"direct" | "full">("direct");
+  const [focusedPersonId, setFocusedPersonId] = useState<string>();
+  const [treeView, setTreeView] = useState<"2d" | "3d">("2d");
+  const jumpToPerson = (id: string) => {
+    if (!treeData?.nodes.some(person => person.id === id)) {
+      setSelectedRoot(id);
+      setDepth(null);
+      setLineage("full");
+    }
+    setFocusedPersonId(undefined);
+    window.requestAnimationFrame(() => setFocusedPersonId(id));
+  };
+
+  useEffect(() => {
+    setTreeView(window.matchMedia("(max-width: 767px)").matches ? "2d" : "3d");
+  }, []);
 
   // Sync lineage with global mode (only override if user hasn't explicitly set full)
   useEffect(() => {
@@ -52,7 +68,7 @@ export default function TreePage() {
     try {
       const params = new URLSearchParams();
       if (selectedRoot) params.set("root", selectedRoot);
-      params.set("depth", String(depth));
+      params.set("depth", depth == null ? "full" : String(depth));
       params.set("lineage", lineage);
       if (isLoydOnly) params.set("loydOnly", "true");
 
@@ -88,29 +104,15 @@ export default function TreePage() {
       {/* Controls */}
       <Card className="border-border/50 bg-card/80 backdrop-blur">
         <CardContent className="flex flex-wrap items-center gap-4 pt-4">
-          <div className="flex items-center gap-2">
+      <div className="flex w-full min-w-0 flex-none items-center gap-2 sm:w-auto sm:min-w-[250px]">
             <TreePine className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">Root:</span>
-            {treeData && treeData.roots.length > 0 ? (
-              <Select
-                value={selectedRoot}
-                onValueChange={(value) => setSelectedRoot(value)}
-              >
-                <SelectTrigger className="w-[260px]">
-                  <SelectValue placeholder="Select root person" />
-                </SelectTrigger>
-                <SelectContent className="max-h-[300px]">
-                  {treeData.roots.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.displayName}
-                      {r.generation != null && ` (Gen ${r.generation})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Skeleton className="h-9 w-[260px]" />
-            )}
+            {treeData ? <div className="min-w-0 flex-1 sm:w-[300px] sm:flex-none"><PersonPicker
+              value={treeData.roots.find((root) => root.id === selectedRoot) as PickedPerson | undefined ?? null}
+              onChange={(person) => { setDepth(null); setSelectedRoot(person?.id ?? ""); }}
+              label="Choose family tree root"
+              placeholder="Search name or family number…"
+            /></div> : <Skeleton className="h-9 w-full max-w-[260px]" />}
           </div>
 
           <div className="flex items-center gap-2">
@@ -119,23 +121,31 @@ export default function TreePage() {
               size="icon"
               variant="outline"
               className="h-8 w-8"
-              onClick={() => setDepth((d) => Math.max(1, d - 1))}
-              disabled={depth <= 1}
+              aria-label="Reduce tree depth"
+              onClick={() => setDepth((d) => d == null ? Math.max(1, (treeData?.maxDepth ?? 1) - 1) : Math.max(1, d - 1))}
+              disabled={depth === 1 || (depth == null && (treeData?.maxDepth ?? 1) <= 1)}
             >
               <Minus className="h-3 w-3" />
             </Button>
             <Badge variant="secondary" className="min-w-[2rem] justify-center">
-              {depth}
+              {depth ?? "Full"}
             </Badge>
+            <Button size="sm" variant={depth == null ? "default" : "outline"} className="h-8 px-2" onClick={() => setDepth(null)} disabled={depth == null}>Full</Button>
             <Button
               size="icon"
               variant="outline"
               className="h-8 w-8"
-              onClick={() => setDepth((d) => Math.min(10, d + 1))}
-              disabled={depth >= 10}
+              aria-label="Increase tree depth"
+              onClick={() => setDepth((d) => d == null ? null : d + 1)}
+              disabled={depth == null}
             >
               <Plus className="h-3 w-3" />
             </Button>
+          </div>
+
+          <div className="flex items-center gap-1 rounded-lg border border-border/60 p-1" aria-label="Tree display mode">
+            <button type="button" aria-pressed={treeView === "2d"} onClick={() => setTreeView("2d")} className={`rounded-md px-3 py-1 text-xs font-medium ${treeView === "2d" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>2D</button>
+            <button type="button" aria-pressed={treeView === "3d"} onClick={() => setTreeView("3d")} className={`rounded-md px-3 py-1 text-xs font-medium ${treeView === "3d" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>3D</button>
           </div>
 
           {/* Lineage filter */}
@@ -167,6 +177,9 @@ export default function TreePage() {
               {treeData.nodes.length} people shown
             </p>
           )}
+          <div className="w-full min-w-0 md:max-w-sm">
+            <PersonPicker value={null} label="Find anyone in the family" placeholder="Find a person by name or number…" onChange={(person) => { if (person) jumpToPerson(person.id); }} />
+          </div>
         </CardContent>
       </Card>
 
@@ -186,12 +199,14 @@ export default function TreePage() {
             <div className="text-center space-y-3">
               <TreePine className="h-10 w-10 text-muted-foreground/40 mx-auto" />
               <p className="text-sm text-muted-foreground">
-                No tree data available. Import the workbook first.
+                Choose a starting person above, or link your family person in Account Settings.
               </p>
             </div>
           </div>
+        ) : treeView === "2d" ? (
+          <FamilyTreeCanvas data={treeData} focusPersonId={focusedPersonId} />
         ) : (
-          <FamilyTreeCanvas data={treeData} />
+          <FamilyTree3D data={treeData} focusPersonId={focusedPersonId} />
         )}
       </Card>
     </div>

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { usePermissions } from "@/hooks/use-permissions";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { createPerson, type PersonPatch } from "@/app/(app)/people/actions";
 import { ArrowLeft, Loader2, UserPlus } from "lucide-react";
 
 export default function NewPersonPage() {
-  const { data: session, status } = useSession();
+  const { can, loading, isAdmin } = usePermissions();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -21,14 +21,14 @@ export default function NewPersonPage() {
     gender: "UNKNOWN",
   });
 
-  if (status === "loading") {
+  if (loading) {
     return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
   }
 
-  if (session && session.user?.role !== "ADMIN") {
+  if (!isAdmin || !can("people.edit")) {
     return (
       <div className="py-20 text-center space-y-4">
-        <p className="text-muted-foreground">Only admins can add people.</p>
+        <p className="text-muted-foreground">Your account does not have permission to add people.</p>
         <Button asChild variant="outline">
           <Link href="/people">
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -92,24 +92,28 @@ export default function NewPersonPage() {
               <Field label="First name">
                 <Input
                   autoFocus
+                  aria-label="First name"
                   value={form.givenName1 ?? ""}
                   onChange={(e) => update("givenName1", e.target.value)}
                 />
               </Field>
               <Field label="Surname">
                 <Input
+                  aria-label="Surname"
                   value={form.surname ?? ""}
                   onChange={(e) => update("surname", e.target.value)}
                 />
               </Field>
               <Field label="Middle name">
                 <Input
+                  aria-label="Middle name"
                   value={form.givenName2 ?? ""}
                   onChange={(e) => update("givenName2", e.target.value)}
                 />
               </Field>
               <Field label="Known as">
                 <Input
+                  aria-label="Known as"
                   value={form.knownAs ?? ""}
                   onChange={(e) => update("knownAs", e.target.value)}
                 />
@@ -118,6 +122,7 @@ export default function NewPersonPage() {
 
             <Field label="Gender">
               <select
+                aria-label="Gender"
                 value={form.gender}
                 onChange={(e) => update("gender", e.target.value as PersonPatch["gender"])}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"

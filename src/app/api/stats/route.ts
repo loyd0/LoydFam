@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseLoydOnly } from "@/lib/loyd-filter";
+import { coverage, summarizeValues, weightedMean } from "@/lib/stats-analytics";
+import { apiPermissionError } from "@/lib/permission-guards";
 
 // SQL snippet added to person table queries when loydOnly is true
 // Assumes table aliased as "p"
@@ -14,6 +16,8 @@ export async function GET(request: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const denied = await apiPermissionError("stats.view", session.user);
+  if (denied) return denied;
 
   const { searchParams } = new URL(request.url);
   const loydOnly = parseLoydOnly(searchParams);
@@ -50,6 +54,8 @@ export async function GET(request: NextRequest) {
     topNames,
     topSurnames,
     generationCounts,
+    namesByGeneration,
+    branchSummaries,
     dataCompleteness,
     childrenPerCouple,
     generationGap,
@@ -94,69 +100,80 @@ export async function GET(request: NextRequest) {
 
     // ─── Births by decade ─────────────────────────────────────────────────────
     prisma.$queryRawUnsafe<{ decade: number; count: bigint }[]>(`
-      SELECT (e."dateYear" / 10 * 10) as decade, COUNT(*)::bigint as count
-      FROM events e
-      INNER JOIN person_events pe ON pe."eventId" = e.id
-      INNER JOIN people p ON p.id = pe."personId" AND p."isPlaceholder" = false
-      WHERE e.type = 'BIRTH' AND e."dateYear" IS NOT NULL
-        ${lSqlP}
+      WITH birth_years AS (
+        SELECT pe."personId", MIN(e."dateYear") as year
+        FROM person_events pe JOIN events e ON e.id=pe."eventId"
+        WHERE e.type='BIRTH' AND e."dateYear" IS NOT NULL GROUP BY pe."personId"
+      )
+      SELECT (b.year / 10 * 10) as decade, COUNT(*)::bigint as count
+      FROM birth_years b JOIN people p ON p.id=b."personId" AND p."isPlaceholder"=false
+      WHERE true ${lSqlP}
       GROUP BY decade ORDER BY decade
     `),
 
     // ─── Births by month (seasonality) ────────────────────────────────────────
     prisma.$queryRawUnsafe<{ month: number; count: bigint }[]>(`
-      SELECT e."dateMonth" as month, COUNT(*)::bigint as count
-      FROM events e
-      INNER JOIN person_events pe ON pe."eventId" = e.id
-      INNER JOIN people p ON p.id = pe."personId" AND p."isPlaceholder" = false
-      WHERE e.type = 'BIRTH' AND e."dateMonth" IS NOT NULL
-        ${lSqlP}
+      WITH birth_months AS (
+        SELECT pe."personId", MIN(e."dateMonth") as month
+        FROM person_events pe JOIN events e ON e.id=pe."eventId"
+        WHERE e.type='BIRTH' AND e."dateMonth" IS NOT NULL GROUP BY pe."personId"
+      )
+      SELECT b.month, COUNT(*)::bigint as count
+      FROM birth_months b JOIN people p ON p.id=b."personId" AND p."isPlaceholder"=false
+      WHERE true ${lSqlP}
       GROUP BY month ORDER BY month
     `),
 
     // ─── Lifespan data (all) ──────────────────────────────────────────────────
     prisma.$queryRawUnsafe<{ lifespan: number; displayName: string }[]>(`
-      SELECT
-        (ed."dateYear" - eb."dateYear") as lifespan,
-        p."displayName"
+      WITH birth_years AS (
+        SELECT pe."personId", MIN(e."dateYear") as year
+        FROM person_events pe JOIN events e ON e.id = pe."eventId"
+        WHERE e.type = 'BIRTH' AND e."dateYear" IS NOT NULL GROUP BY pe."personId"
+      ), death_years AS (
+        SELECT pe."personId", MIN(e."dateYear") as year
+        FROM person_events pe JOIN events e ON e.id = pe."eventId"
+        WHERE e.type = 'DEATH' AND e."dateYear" IS NOT NULL GROUP BY pe."personId"
+      )
+      SELECT (d.year - b.year) as lifespan, p."displayName"
       FROM people p
-      INNER JOIN person_events peb ON peb."personId" = p.id
-      INNER JOIN events eb ON eb.id = peb."eventId" AND eb.type = 'BIRTH' AND eb."dateYear" IS NOT NULL
-      INNER JOIN person_events ped ON ped."personId" = p.id
-      INNER JOIN events ed ON ed.id = ped."eventId" AND ed.type = 'DEATH' AND ed."dateYear" IS NOT NULL
-      WHERE p."isPlaceholder" = false ${lSqlP} AND (ed."dateYear" - eb."dateYear") BETWEEN 1 AND 130
+      INNER JOIN birth_years b ON b."personId" = p.id
+      INNER JOIN death_years d ON d."personId" = p.id
+      WHERE p."isPlaceholder" = false ${lSqlP} AND (d.year - b.year) BETWEEN 0 AND 130
       ORDER BY lifespan DESC
     `),
 
     // ─── Lifespan by gender ───────────────────────────────────────────────────
     prisma.$queryRawUnsafe<{ gender: string; avg_lifespan: number; median_lifespan: number; count: bigint }[]>(`
-      SELECT
-        p.gender,
-        ROUND(AVG(ed."dateYear" - eb."dateYear"))::int as avg_lifespan,
-        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY (ed."dateYear" - eb."dateYear"))::int as median_lifespan,
+      WITH birth_years AS (
+        SELECT pe."personId", MIN(e."dateYear") as year FROM person_events pe JOIN events e ON e.id=pe."eventId" WHERE e.type='BIRTH' AND e."dateYear" IS NOT NULL GROUP BY pe."personId"
+      ), death_years AS (
+        SELECT pe."personId", MIN(e."dateYear") as year FROM person_events pe JOIN events e ON e.id=pe."eventId" WHERE e.type='DEATH' AND e."dateYear" IS NOT NULL GROUP BY pe."personId"
+      )
+      SELECT p.gender, ROUND(AVG(d.year-b.year))::int as avg_lifespan,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY (d.year-b.year))::int as median_lifespan,
         COUNT(*)::bigint as count
       FROM people p
-      INNER JOIN person_events peb ON peb."personId" = p.id
-      INNER JOIN events eb ON eb.id = peb."eventId" AND eb.type = 'BIRTH' AND eb."dateYear" IS NOT NULL
-      INNER JOIN person_events ped ON ped."personId" = p.id
-      INNER JOIN events ed ON ed.id = ped."eventId" AND ed.type = 'DEATH' AND ed."dateYear" IS NOT NULL
+      INNER JOIN birth_years b ON b."personId"=p.id INNER JOIN death_years d ON d."personId"=p.id
       WHERE p."isPlaceholder" = false ${lSqlP}
-        AND (ed."dateYear" - eb."dateYear") BETWEEN 1 AND 130
+        AND (d.year-b.year) BETWEEN 0 AND 130
         AND p.gender != 'UNKNOWN'
       GROUP BY p.gender
     `),
 
     // ─── Age at death distribution (10-year buckets) ──────────────────────────
     prisma.$queryRawUnsafe<{ bucket: number; count: bigint }[]>(`
+      WITH birth_years AS (
+        SELECT pe."personId", MIN(e."dateYear") as year FROM person_events pe JOIN events e ON e.id=pe."eventId" WHERE e.type='BIRTH' AND e."dateYear" IS NOT NULL GROUP BY pe."personId"
+      ), death_years AS (
+        SELECT pe."personId", MIN(e."dateYear") as year FROM person_events pe JOIN events e ON e.id=pe."eventId" WHERE e.type='DEATH' AND e."dateYear" IS NOT NULL GROUP BY pe."personId"
+      )
       SELECT
-        ((ed."dateYear" - eb."dateYear") / 10 * 10) as bucket,
-        COUNT(*)::bigint as count
+        ((d.year - b.year) / 10 * 10) as bucket,
+        COUNT(DISTINCT p.id)::bigint as count
       FROM people p
-      INNER JOIN person_events peb ON peb."personId" = p.id
-      INNER JOIN events eb ON eb.id = peb."eventId" AND eb.type = 'BIRTH' AND eb."dateYear" IS NOT NULL
-      INNER JOIN person_events ped ON ped."personId" = p.id
-      INNER JOIN events ed ON ed.id = ped."eventId" AND ed.type = 'DEATH' AND ed."dateYear" IS NOT NULL
-      WHERE p."isPlaceholder" = false ${lSqlP} AND (ed."dateYear" - eb."dateYear") BETWEEN 0 AND 120
+      INNER JOIN birth_years b ON b."personId"=p.id INNER JOIN death_years d ON d."personId"=p.id
+      WHERE p."isPlaceholder" = false ${lSqlP} AND (d.year-b.year) BETWEEN 0 AND 120
       GROUP BY bucket ORDER BY bucket
     `),
 
@@ -191,6 +208,43 @@ export async function GET(request: NextRequest) {
       GROUP BY generation ORDER BY generation
     `),
 
+    prisma.$queryRawUnsafe<{ generation: number; name: string; count: bigint }[]>(`
+      WITH name_counts AS (
+        SELECT COALESCE("legacyGeneration", "generationFromWilliam") as generation,
+          "givenName1" as name, COUNT(*)::bigint as count
+        FROM people
+        WHERE "isPlaceholder" = false ${lSqlBare}
+          AND "givenName1" IS NOT NULL AND "givenName1" != ''
+          AND COALESCE("legacyGeneration", "generationFromWilliam") IS NOT NULL
+        GROUP BY generation, name
+      ), ranked AS (
+        SELECT generation, name, count,
+          ROW_NUMBER() OVER (PARTITION BY generation ORDER BY count DESC, name) as rank
+        FROM name_counts
+      )
+      SELECT generation, name, count FROM ranked WHERE rank <= 3
+      ORDER BY generation, rank
+    `),
+
+    prisma.$queryRawUnsafe<{ branch: string | null; members: bigint; with_birth_year: bigint; with_death_record: bigint; generations: bigint }[]>(`
+      SELECT p."branchRootExternalId" as branch,
+        COUNT(*)::bigint as members,
+        COUNT(*) FILTER (WHERE EXISTS (
+          SELECT 1 FROM person_events pe JOIN events e ON e.id=pe."eventId"
+          WHERE pe."personId"=p.id AND e.type='BIRTH' AND e."dateYear" IS NOT NULL
+        ))::bigint as with_birth_year,
+        COUNT(*) FILTER (WHERE EXISTS (
+          SELECT 1 FROM person_events pe JOIN events e ON e.id=pe."eventId"
+          WHERE pe."personId"=p.id AND e.type='DEATH'
+        ))::bigint as with_death_record,
+        COUNT(DISTINCT COALESCE(p."legacyGeneration", p."generationFromWilliam"))::bigint as generations
+      FROM people p
+      WHERE p."isPlaceholder"=false ${lSqlP}
+      GROUP BY p."branchRootExternalId"
+      ORDER BY members DESC, p."branchRootExternalId" ASC NULLS LAST
+      LIMIT 12
+    `),
+
     // ─── Data completeness ────────────────────────────────────────────────────
     Promise.all([
       prisma.person.count({ where: loydWhere }),
@@ -221,7 +275,7 @@ export async function GET(request: NextRequest) {
       `).then((r) => Number(r[0]?.count ?? 0)),
     ]),
 
-    // ─── Children per couple ──────────────────────────────────────────────────
+    // ─── Recorded children per parent ────────────────────────────────────────
     prisma.$queryRawUnsafe<{ children: number; count: bigint }[]>(`
       SELECT child_count as children, COUNT(*)::bigint as count
       FROM (
@@ -256,17 +310,20 @@ export async function GET(request: NextRequest) {
 
     // ─── Longevity by generation ──────────────────────────────────────────────
     prisma.$queryRawUnsafe<{ generation: number; avg_lifespan: number; count: bigint }[]>(`
+      WITH birth_years AS (
+        SELECT pe."personId", MIN(e."dateYear") as year FROM person_events pe JOIN events e ON e.id=pe."eventId" WHERE e.type='BIRTH' AND e."dateYear" IS NOT NULL GROUP BY pe."personId"
+      ), death_years AS (
+        SELECT pe."personId", MIN(e."dateYear") as year FROM person_events pe JOIN events e ON e.id=pe."eventId" WHERE e.type='DEATH' AND e."dateYear" IS NOT NULL GROUP BY pe."personId"
+      )
       SELECT
         COALESCE(p."legacyGeneration", p."generationFromWilliam") as generation,
-        ROUND(AVG(ed."dateYear" - eb."dateYear"))::int as avg_lifespan,
+        ROUND(AVG(d.year - b.year))::int as avg_lifespan,
         COUNT(*)::bigint as count
       FROM people p
-      INNER JOIN person_events peb ON peb."personId" = p.id
-      INNER JOIN events eb ON eb.id = peb."eventId" AND eb.type = 'BIRTH' AND eb."dateYear" IS NOT NULL
-      INNER JOIN person_events ped ON ped."personId" = p.id
-      INNER JOIN events ed ON ed.id = ped."eventId" AND ed.type = 'DEATH' AND ed."dateYear" IS NOT NULL
+      INNER JOIN birth_years b ON b."personId" = p.id
+      INNER JOIN death_years d ON d."personId" = p.id
       WHERE p."isPlaceholder" = false ${lSqlP}
-        AND (ed."dateYear" - eb."dateYear") BETWEEN 1 AND 130
+        AND (d.year - b.year) BETWEEN 0 AND 130
         AND COALESCE(p."legacyGeneration", p."generationFromWilliam") IS NOT NULL
       GROUP BY generation
       HAVING COUNT(*) >= 2
@@ -333,27 +390,18 @@ export async function GET(request: NextRequest) {
 
   // ─── Compute lifespan stats ────────────────────────────────────────────────
   const lifespans = lifespanData.map((d) => d.lifespan);
-  const sorted = [...lifespans].sort((a, b) => a - b);
-  const avgLifespan =
-    sorted.length > 0
-      ? Math.round(sorted.reduce((a, b) => a + b, 0) / sorted.length)
-      : 0;
-  const medianLifespan =
-    sorted.length > 0 ? sorted[Math.floor(sorted.length / 2)] : 0;
+  const lifespanSummary = summarizeValues(lifespans);
 
-  // ─── Children per couple stats ─────────────────────────────────────────────
-  const totalCouplesWithChildren = childrenPerCouple.reduce(
+  // ─── Recorded children per parent stats ───────────────────────────────────
+  const totalParentsWithChildren = childrenPerCouple.reduce(
     (s, r) => s + Number(r.count),
     0
   );
-  const totalChildrenRecorded = childrenPerCouple.reduce(
-    (s, r) => s + r.children * Number(r.count),
-    0
+  const childrenSummary = weightedMean(
+    childrenPerCouple,
+    (row) => row.children,
+    (row) => Number(row.count),
   );
-  const avgChildrenPerCouple =
-    totalCouplesWithChildren > 0
-      ? Math.round((totalChildrenRecorded / totalCouplesWithChildren) * 10) / 10
-      : 0;
 
   const [
     totalForCompleteness,
@@ -395,9 +443,9 @@ export async function GET(request: NextRequest) {
 
     // ── Longevity ─────────────────────────────────────────────────────────────
     longevity: {
-      average: avgLifespan,
-      median: medianLifespan,
-      sampleSize: lifespans.length,
+      average: lifespanSummary.average,
+      median: lifespanSummary.median,
+      sampleSize: lifespanSummary.count,
       oldest: lifespanData.slice(0, 10).map((d) => ({
         name: d.displayName,
         age: d.lifespan,
@@ -442,11 +490,27 @@ export async function GET(request: NextRequest) {
       generation: g.generation,
       count: Number(g.count),
     })),
+    namesByGeneration: namesByGeneration.map((row) => ({
+      generation: row.generation,
+      name: row.name,
+      count: Number(row.count),
+    })),
+    branches: (() => {
+      let branchIndex = 0;
+      return branchSummaries.map((row) => ({
+        // Keep imported root identifiers out of the response; rank the named groups by size.
+        label: row.branch ? `Branch ${++branchIndex}` : "Unassigned",
+        members: Number(row.members),
+        withBirthYear: Number(row.with_birth_year),
+        withDeathRecord: Number(row.with_death_record),
+        generations: Number(row.generations),
+      }));
+    })(),
 
     // ── Family structure ──────────────────────────────────────────────────────
     familyStructure: {
-      avgChildrenPerCouple,
-      totalCouplesWithChildren,
+      avgChildrenPerParent: childrenSummary.average,
+      totalParentsWithChildren,
       childrenDistribution: childrenPerCouple.map((c) => ({
         children: c.children,
         count: Number(c.count),
@@ -488,39 +552,19 @@ export async function GET(request: NextRequest) {
     dataCompleteness: {
       total: totalForCompleteness,
       withDob: {
-        count: withDob,
-        pct:
-          totalForCompleteness > 0
-            ? Math.round((withDob / totalForCompleteness) * 100)
-            : 0,
+        ...coverage(withDob, totalForCompleteness),
       },
       withDod: {
-        count: withDod,
-        pct:
-          totalForCompleteness > 0
-            ? Math.round((withDod / totalForCompleteness) * 100)
-            : 0,
+        ...coverage(withDod, totalForCompleteness),
       },
       withGender: {
-        count: withGender,
-        pct:
-          totalForCompleteness > 0
-            ? Math.round((withGender / totalForCompleteness) * 100)
-            : 0,
+        ...coverage(withGender, totalForCompleteness),
       },
       withParents: {
-        count: withParents,
-        pct:
-          totalForCompleteness > 0
-            ? Math.round((withParents / totalForCompleteness) * 100)
-            : 0,
+        ...coverage(withParents, totalForCompleteness),
       },
       withSpouse: {
-        count: withSpouse,
-        pct:
-          totalForCompleteness > 0
-            ? Math.round((withSpouse / totalForCompleteness) * 100)
-            : 0,
+        ...coverage(withSpouse, totalForCompleteness),
       },
     },
   });

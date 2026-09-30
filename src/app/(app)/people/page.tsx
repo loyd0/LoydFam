@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useSession } from "next-auth/react";
+import { usePermissions } from "@/hooks/use-permissions";
 import { useViewMode } from "@/hooks/use-view-mode";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -78,8 +78,8 @@ const PAGE_SIZES = [10, 25, 50, 100];
 const GENERATIONS = Array.from({ length: 14 }, (_, i) => i + 1);
 
 export default function PeoplePage() {
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN";
+  const { can, isAdmin } = usePermissions();
+  const canEditPerson = isAdmin && can("people.edit");
   const { isLoydOnly } = useViewMode();
   const [data, setData] = useState<PeopleResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,6 +94,7 @@ export default function PeoplePage() {
   const [availableTags, setAvailableTags] = useState<{ name: string; count: number }[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -150,6 +151,7 @@ export default function PeoplePage() {
   }, [fetchPeople]);
 
   const hasFilters = gender !== "" || living || generation !== "" || tag !== "";
+  const activeFilterCount = Number(Boolean(gender)) + Number(living) + Number(Boolean(generation)) + Number(Boolean(tag));
 
   function clearFilters() {
     setGender("");
@@ -180,7 +182,10 @@ export default function PeoplePage() {
     if (tag) params.set("tag", tag);
     if (isLoydOnly) params.set("loydOnly", "true");
     params.set("format", format);
-    window.location.href = `/api/export?${params}`;
+    const link = document.createElement("a");
+    link.href = `/api/export?${params}`;
+    link.download = "";
+    link.click();
   }
 
   function openDrawer(id: string) {
@@ -200,11 +205,11 @@ export default function PeoplePage() {
       : "bg-muted text-muted-foreground";
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-5 sm:space-y-6">
       {/* Title */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">People</h1>
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">People</h1>
           <p className="mt-1 text-muted-foreground">
             Searchable directory of all people in the family tree.
             {data && (
@@ -214,12 +219,12 @@ export default function PeoplePage() {
             )}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <DropdownMenu>
+        <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
+          {can("sources.download") && <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5">
+              <Button variant="outline" size="sm" className="flex-1 gap-1.5 sm:flex-none" aria-label="Export people">
                 <Download className="h-4 w-4" />
-                <span className="hidden sm:inline">Export</span>
+                <span>Export</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -235,12 +240,12 @@ export default function PeoplePage() {
                 GEDCOM (genealogy)
               </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
-          {isAdmin && (
-            <Button asChild size="sm" className="gap-1.5">
+          </DropdownMenu>}
+          {canEditPerson && (
+            <Button asChild size="sm" className="flex-1 gap-1.5 sm:flex-none">
               <Link href="/people/new">
                 <UserPlus className="h-4 w-4" />
-                <span className="hidden sm:inline">Add person</span>
+                <span>Add person</span>
               </Link>
             </Button>
           )}
@@ -248,24 +253,34 @@ export default function PeoplePage() {
       </div>
 
       {/* Search + Filters toolbar */}
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:gap-3">
         {/* Search */}
-        <div className="relative min-w-[220px] flex-1 max-w-sm">
+        <div className="relative min-w-0 flex-1 sm:min-w-[220px] sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search by name…"
+            placeholder="Search by name or number…"
             className="pl-10"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
 
+        <div className="flex items-center gap-2 sm:hidden">
+          <Button type="button" variant="outline" className="flex-1 justify-between" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}>
+            <span className="flex items-center gap-2"><Filter className="size-4" /> Filters</span>
+            <span className="text-xs text-muted-foreground">{activeFilterCount ? `${activeFilterCount} active` : filtersOpen ? "Close" : "Optional"}</span>
+          </Button>
+          {(hasFilters || query) && <Button type="button" variant="ghost" onClick={clearFilters} aria-label="Clear search and filters">Clear</Button>}
+        </div>
+
+        <div className={`${filtersOpen ? "grid" : "hidden"} grid-cols-2 items-end gap-2 sm:flex sm:flex-wrap sm:gap-3`}>
+
         {/* Gender filter */}
         <Select
           value={gender || "all"}
           onValueChange={(v) => setGender(v === "all" ? "" : (v as "MALE" | "FEMALE"))}
         >
-          <SelectTrigger className="w-[130px]">
+          <SelectTrigger className="w-full sm:w-[130px]">
             <SelectValue placeholder="Gender" />
           </SelectTrigger>
           <SelectContent>
@@ -280,7 +295,7 @@ export default function PeoplePage() {
           value={generation || "all"}
           onValueChange={(v) => setGeneration(v === "all" ? "" : v)}
         >
-          <SelectTrigger className="w-[140px]">
+          <SelectTrigger className="w-full sm:w-[140px]">
             <SelectValue placeholder="Generation" />
           </SelectTrigger>
           <SelectContent>
@@ -299,7 +314,7 @@ export default function PeoplePage() {
             value={tag || "all"}
             onValueChange={(v) => setTag(v === "all" ? "" : v)}
           >
-            <SelectTrigger className="w-[140px]">
+            <SelectTrigger className="w-full sm:w-[140px]">
               <SelectValue placeholder="Tag" />
             </SelectTrigger>
             <SelectContent>
@@ -317,7 +332,7 @@ export default function PeoplePage() {
         <Button
           variant={living ? "default" : "outline"}
           size="sm"
-          className="h-10 gap-1.5"
+          className="h-10 w-full gap-1.5 sm:w-auto"
           onClick={() => setLiving((v) => !v)}
         >
           <span
@@ -333,7 +348,7 @@ export default function PeoplePage() {
           <Button
             variant="ghost"
             size="sm"
-            className="h-10 text-muted-foreground gap-1"
+            className="h-10 w-full text-muted-foreground gap-1 sm:w-auto"
             onClick={clearFilters}
           >
             <X className="h-3.5 w-3.5" />
@@ -349,16 +364,16 @@ export default function PeoplePage() {
         />
 
         {/* Spacer */}
-        <div className="flex-1" />
+        <div className="hidden flex-1 sm:block" />
 
         {/* Page size */}
-        <div className="flex items-center gap-2">
+        <div className="col-span-2 flex items-center justify-between gap-2 sm:justify-start">
           <span className="text-sm text-muted-foreground whitespace-nowrap">Rows per page</span>
           <Select
             value={String(limit)}
             onValueChange={(v) => setLimit(Number(v))}
           >
-            <SelectTrigger className="w-[75px]">
+            <SelectTrigger className="w-[84px] sm:w-[75px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -370,6 +385,7 @@ export default function PeoplePage() {
             </SelectContent>
           </Select>
         </div>
+      </div>
       </div>
 
       {/* Active filter chips */}
@@ -439,14 +455,14 @@ export default function PeoplePage() {
             </div>
           ) : data && data.people.length > 0 ? (
             <>
-              <Table>
+              <Table className="table-fixed sm:table-auto">
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="w-10 pl-4" />
                     <TableHead>Name</TableHead>
                     <TableHead className="hidden sm:table-cell">Dates</TableHead>
                     <TableHead className="hidden md:table-cell">Gen</TableHead>
-                    <TableHead className="text-right pr-4">Status</TableHead>
+                    <TableHead className="hidden text-right pr-4 sm:table-cell">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -466,10 +482,16 @@ export default function PeoplePage() {
                       </TableCell>
 
                       {/* Name */}
-                      <TableCell>
-                        <p className="font-medium text-sm leading-tight">
+                      <TableCell className="min-w-0 whitespace-normal">
+                        <div className="flex min-w-0 items-start justify-between gap-1.5">
+                          <p className="min-w-0 break-words whitespace-normal font-medium text-sm leading-tight">
                           {person.displayName}
-                        </p>
+                          </p>
+                          <div className="flex shrink-0 items-center gap-1 sm:hidden">
+                            {person.isLiving && <span className="size-2 rounded-full bg-emerald-500" aria-label="Living" title="Living" />}
+                            <Badge variant="outline" className="text-[10px]">{person.gender === "MALE" ? "M" : person.gender === "FEMALE" ? "F" : "?"}</Badge>
+                          </div>
+                        </div>
                         {person.knownAs && (
                           <p className="text-xs text-muted-foreground">
                             &ldquo;{person.knownAs}&rdquo;
@@ -490,7 +512,7 @@ export default function PeoplePage() {
                       </TableCell>
 
                       {/* Status badges */}
-                      <TableCell className="text-right pr-4">
+                      <TableCell className="hidden text-right pr-4 sm:table-cell">
                         <div className="flex items-center justify-end gap-1.5">
                           {person.isLiving && (
                             <Badge className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-0">
@@ -512,7 +534,7 @@ export default function PeoplePage() {
               </Table>
 
               {/* Pagination */}
-              <div className="flex items-center justify-between border-t border-border/50 px-4 py-3">
+              <div className="flex flex-col gap-2 border-t border-border/50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
                 <p className="text-xs text-muted-foreground">
                   {((data.page - 1) * data.limit + 1).toLocaleString()}–
                   {Math.min(data.page * data.limit, data.total).toLocaleString()} of{" "}
@@ -526,6 +548,7 @@ export default function PeoplePage() {
                     size="sm"
                     variant="outline"
                     className="h-8 w-8 p-0"
+                    aria-label="Previous page"
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page <= 1 || loading}
                   >
@@ -538,6 +561,7 @@ export default function PeoplePage() {
                     size="sm"
                     variant="outline"
                     className="h-8 w-8 p-0"
+                    aria-label="Next page"
                     onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
                     disabled={page >= data.totalPages || loading}
                   >

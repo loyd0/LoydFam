@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { loydOnlyWhere, parseLoydOnly } from "@/lib/loyd-filter";
+import { findClosestSharedAncestors, parentRelationshipLabels } from "@/lib/relationship-ancestors";
+import { apiPermissionError } from "@/lib/permission-guards";
 
 interface PathNode {
   id: string;
@@ -15,6 +17,8 @@ export async function GET(request: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const denied = await apiPermissionError("relationship.view", session.user);
+  if (denied) return denied;
 
   const { searchParams } = new URL(request.url);
   const aId = searchParams.get("a");
@@ -25,14 +29,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing a or b param" }, { status: 400 });
   }
 
-  if (aId === bId) {
-    return NextResponse.json({ path: [], same: true });
-  }
-
   // Load adjacency: parent-child edges + partnership edges (undirected BFS)
   const [parentChildEdges, partnerships, people] = await Promise.all([
     prisma.parentChild.findMany({
-      select: { parentId: true, childId: true },
+      select: { parentId: true, childId: true, type: true },
     }),
     prisma.partnership.findMany({
       select: { personAId: true, personBId: true },
@@ -46,6 +46,23 @@ export async function GET(request: NextRequest) {
   ]);
 
   const personMap = new Map(people.map((p) => [p.id, p]));
+  if (!personMap.has(aId) || !personMap.has(bId)) {
+    return NextResponse.json({ error: "Person not found in the selected family view." }, { status: 404 });
+  }
+  const visibleParentEdges = parentChildEdges.filter((edge) => personMap.has(edge.parentId) && personMap.has(edge.childId));
+  const commonAncestors = findClosestSharedAncestors(aId, bId, visibleParentEdges)
+    .filter((ancestor) => personMap.has(ancestor.id))
+    .map((ancestor) => ({ ...ancestor, displayName: personMap.get(ancestor.id)!.displayName }));
+
+  if (aId === bId) {
+    const person = personMap.get(aId)!;
+    return NextResponse.json({
+      path: [{ id: person.id, displayName: person.displayName, gender: person.gender, relation: "start" }],
+      connected: true,
+      steps: 0,
+      commonAncestors,
+    });
+  }
 
   // Build undirected adjacency map with edge labels
   const adj = new Map<string, { id: string; label: string }[]>();
@@ -56,10 +73,12 @@ export async function GET(request: NextRequest) {
     adj.get(b)!.push({ id: a, label: bToA });
   }
 
-  for (const pc of parentChildEdges) {
-    addEdge(pc.parentId, pc.childId, "parent of", "child of");
+  for (const pc of visibleParentEdges) {
+    const labels = parentRelationshipLabels(pc.type);
+    addEdge(pc.parentId, pc.childId, labels.parentToChild, labels.childToParent);
   }
   for (const p of partnerships) {
+    if (!personMap.has(p.personAId) || !personMap.has(p.personBId)) continue;
     addEdge(p.personAId, p.personBId, "partner of", "partner of");
   }
 
@@ -84,7 +103,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (!found) {
-    return NextResponse.json({ path: [], connected: false });
+    return NextResponse.json({ path: [], connected: false, commonAncestors });
   }
 
   // Reconstruct path
@@ -102,5 +121,5 @@ export async function GET(request: NextRequest) {
     current = meta?.from ?? null;
   }
 
-  return NextResponse.json({ path, connected: true, steps: path.length - 1 });
+  return NextResponse.json({ path, connected: true, steps: path.length - 1, commonAncestors });
 }

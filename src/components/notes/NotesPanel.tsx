@@ -53,7 +53,7 @@ export function NotesPanel({ entityType, entityId, notes, canEdit, onChange }: N
           <span className="text-sm font-normal text-muted-foreground">({notes.length})</span>
         </h3>
         {canEdit && !composing && (
-          <Button size="xs" variant="outline" onClick={() => setComposing(true)}>
+          <Button size="xs" variant="outline" aria-label="Add note" onClick={() => setComposing(true)}>
             <Plus className="h-3 w-3" />
             <span className="hidden sm:inline">Add note</span>
           </Button>

@@ -6,6 +6,7 @@ import { useViewMode } from "@/hooks/use-view-mode";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PersonPicker, type PickedPerson } from "@/components/people/PersonPicker";
 import {
   Select,
   SelectContent,
@@ -56,8 +57,31 @@ export default function GenerationsPage() {
   const { isLoydOnly } = useViewMode();
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState<Set<number>>(new Set([1, 2]));
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [genderFilter, setGenderFilter] = useState<"" | "MALE" | "FEMALE">("");
+  const [focusPersonId, setFocusPersonId] = useState("");
+  const [focusPersonName, setFocusPersonName] = useState("");
+  const [focusPerson, setFocusPerson] = useState<PickedPerson | null>(null);
+
+  useEffect(() => {
+    const urlPersonId = new URLSearchParams(window.location.search).get("personId");
+    const request = urlPersonId
+      ? fetch(`/api/search?id=${encodeURIComponent(urlPersonId)}`).then((response) => response.ok ? response.json() : null).then((data) => data?.people?.[0] ?? null)
+      : fetch("/api/account/default-people").then((response) => response.ok ? response.json() : null).then((data) => data?.root ?? null);
+    request.then((person) => {
+      if (!person) return;
+      setFocusPerson(person); setFocusPersonId(person.id); setFocusPersonName(person.displayName);
+      if (person.generation != null) setExpanded((current) => new Set([...current, person.generation]));
+    }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!focusPersonId || !generations.some((generation) => generation.people.some((person) => person.id === focusPersonId))) return;
+    const timer = window.setTimeout(() => {
+      document.querySelector(`[data-family-person-id="${CSS.escape(focusPersonId)}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [focusPersonId, expanded, generations]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,6 +91,7 @@ export default function GenerationsPage() {
       if (res.ok) {
         const data = await res.json();
         setGenerations(data.generations);
+        setExpanded(new Set(data.generations.map((generation: Generation) => generation.generation)));
       }
     } finally {
       setLoading(false);
@@ -94,6 +119,7 @@ export default function GenerationsPage() {
         <h1 className="text-3xl font-bold tracking-tight">Generation Explorer</h1>
         <p className="mt-1 text-muted-foreground">
           Browse all family members organised by generation.
+          {focusPersonName && <span className="ml-2">Your linked record is <span className="font-medium text-foreground">{focusPersonName}</span>.</span>}
           {!loading && total > 0 && (
             <span className="ml-2 font-medium text-foreground">
               {total.toLocaleString()} people across {generations.length} generations
@@ -104,6 +130,17 @@ export default function GenerationsPage() {
 
       {/* Filter bar */}
       <div className="flex items-center gap-3 flex-wrap">
+        <div className="w-full max-w-md sm:w-[340px]">
+          <PersonPicker
+            value={focusPerson}
+            label="Focus generation explorer on a person"
+            onChange={(person) => {
+              setFocusPerson(person); setFocusPersonId(person?.id ?? ""); setFocusPersonName(person?.displayName ?? "");
+              const generation = generations.find((item) => item.people.some((member) => member.id === person?.id));
+              if (generation) setExpanded((current) => new Set([...current, generation.generation]));
+            }}
+          />
+        </div>
         <Select
           value={genderFilter || "all"}
           onValueChange={(v) => setGenderFilter(v === "all" ? "" : (v as "MALE" | "FEMALE"))}
@@ -240,8 +277,9 @@ export default function GenerationsPage() {
                           {filteredPeople.map((p) => (
                             <Link
                               key={p.id}
+                              data-family-person-id={p.id}
                               href={`/people/${p.id}`}
-                              className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-muted/40 transition-colors group"
+                              className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-muted/40 transition-colors group ${p.id === focusPersonId ? "bg-primary/10 ring-1 ring-primary/30" : ""}`}
                             >
                               <div
                                 className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${genderColor(p.gender)}`}
