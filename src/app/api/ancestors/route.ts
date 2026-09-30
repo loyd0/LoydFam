@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { loydOnlyWhere, parseLoydOnly } from "@/lib/loyd-filter";
+import { apiPermissionError } from "@/lib/permission-guards";
 
 interface AncestorNode {
   id: string;
@@ -10,7 +11,8 @@ interface AncestorNode {
   birthYear: number | null;
   deathYear: number | null;
   isLiving: boolean;
-  pedigreePosition: number; // Ahnentafel number: 1=subject, 2=father, 3=mother, 4=paternal grandfather...
+  pedigreePosition: number; // Ahnentafel position: 1=subject, then recorded parent links by slot.
+  relationshipType: string | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -18,10 +20,14 @@ export async function GET(request: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const denied = await apiPermissionError("fanChart.view", session.user);
+  if (denied) return denied;
 
   const { searchParams } = new URL(request.url);
   const personId = searchParams.get("personId");
-  const depth = Math.min(5, Math.max(1, parseInt(searchParams.get("depth") || "4", 10)));
+  const depthParam = searchParams.get("depth");
+  const requestedDepth = depthParam && depthParam !== "full" ? Number.parseInt(depthParam, 10) : null;
+  const depth = requestedDepth != null && Number.isFinite(requestedDepth) ? Math.max(1, requestedDepth) : null;
   const loydOnly = parseLoydOnly(searchParams);
 
   if (!personId) {
@@ -63,29 +69,31 @@ export async function GET(request: NextRequest) {
   }
 
   // Queue: [personId, ahnentafelNum, currentDepth]
-  const queue: [string, number, number][] = [[personId, 1, 0]];
+  const queue: [string, number, number, Set<string>, string | null][] = [[personId, 1, 0, new Set([personId]), null]];
+  let maxDepth = 0;
 
   while (queue.length > 0) {
-    const [currentId, ahnNum, currentDepth] = queue.shift()!;
+    const [currentId, ahnNum, currentDepth, path, relationshipType] = queue.shift()!;
     const person = await loadPerson(currentId);
     if (!person) continue;
 
-    ancestors.push({ ...person, pedigreePosition: ahnNum });
+    ancestors.push({ ...person, pedigreePosition: ahnNum, relationshipType });
 
-    if (currentDepth >= depth) continue;
+    maxDepth = Math.max(maxDepth, currentDepth);
+    if (depth != null && currentDepth >= depth) continue;
 
     // Get parents
     const parentRels = await prisma.parentChild.findMany({
       where: { childId: currentId },
-      select: { parentId: true, parent: { select: { gender: true } } },
+      select: { parentId: true, type: true, parent: { select: { gender: true } } },
     });
 
     // Father = ahnNum*2, Mother = ahnNum*2+1
     const father = parentRels.find((r) => r.parent.gender === "MALE");
     const mother = parentRels.find((r) => r.parent.gender !== "MALE");
 
-    if (father) queue.push([father.parentId, ahnNum * 2, currentDepth + 1]);
-    if (mother) queue.push([mother.parentId, ahnNum * 2 + 1, currentDepth + 1]);
+    if (father && !path.has(father.parentId)) queue.push([father.parentId, ahnNum * 2, currentDepth + 1, new Set([...path, father.parentId]), father.type]);
+    if (mother && !path.has(mother.parentId)) queue.push([mother.parentId, ahnNum * 2 + 1, currentDepth + 1, new Set([...path, mother.parentId]), mother.type]);
   }
 
   // Also include root lookup for person selector (filtered by loydOnly)
@@ -99,5 +107,5 @@ export async function GET(request: NextRequest) {
     take: 500,
   });
 
-  return NextResponse.json({ ancestors, roots });
+  return NextResponse.json({ ancestors, roots, maxDepth });
 }

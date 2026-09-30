@@ -3,6 +3,7 @@
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { auditedPrisma } from "@/lib/audited-prisma";
 import { requireAdmin } from "@/lib/authz";
 import { logActivity } from "@/lib/activity";
 import { appUrl, sendMail } from "@/lib/email";
@@ -31,6 +32,8 @@ export interface CreateInviteResult {
 
 export async function createInvite(input: CreateInviteInput): Promise<CreateInviteResult> {
   const session = await requireAdmin();
+  const db = auditedPrisma(session.user, "Manage family account invitations");
+  if (!input || typeof input.email !== "string" || !["ADMIN", "VIEWER"].includes(input.role)) throw new Error("Valid email and role required");
   const email = input.email.trim().toLowerCase();
   if (!email || !email.includes("@")) throw new Error("Valid email required");
 
@@ -40,7 +43,7 @@ export async function createInvite(input: CreateInviteInput): Promise<CreateInvi
   const token = newToken();
   const expiresAt = new Date(Date.now() + INVITE_EXPIRES_HOURS * 60 * 60 * 1000);
 
-  const invite = await prisma.invite.upsert({
+  const invite = await db.invite.upsert({
     where: { email },
     create: {
       email,
@@ -106,10 +109,12 @@ export async function createInvite(input: CreateInviteInput): Promise<CreateInvi
 
 export async function revokeInvite(inviteId: string): Promise<void> {
   const session = await requireAdmin();
-  await prisma.invite.update({
-    where: { id: inviteId },
+  const db = auditedPrisma(session.user, "Manage family account invitations");
+  const revoked = await db.invite.updateMany({
+    where: { id: inviteId, status: "PENDING" },
     data: { status: "REVOKED", token: null },
   });
+  if (revoked.count !== 1) throw new Error("Only pending invitations can be revoked. Refresh and try again.");
   await logActivity({
     actorUserId: session.user.id,
     type: "INVITE_SENT",

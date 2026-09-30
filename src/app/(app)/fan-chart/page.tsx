@@ -6,14 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { GitBranch, User as UserIcon } from "lucide-react";
+import { PersonPicker, type PickedPerson } from "@/components/people/PersonPicker";
+import { GitBranch, Minus, Plus, User as UserIcon } from "lucide-react";
 
 interface AncestorNode {
   id: string;
@@ -23,14 +17,14 @@ interface AncestorNode {
   deathYear: number | null;
   isLiving: boolean;
   pedigreePosition: number;
+  relationshipType: string | null;
 }
 
 interface AncestorData {
   ancestors: AncestorNode[];
   roots: { id: string; displayName: string }[];
+  maxDepth: number;
 }
-
-const MAX_DEPTH = 4;
 
 function getGeneration(pos: number): number {
   return Math.floor(Math.log2(pos));
@@ -47,29 +41,37 @@ export default function FanChartPage() {
   const [data, setData] = useState<AncestorData | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string>("");
-  const [depth, setDepth] = useState(3);
-  const [rootsLoading, setRootsLoading] = useState(true);
-  const [roots, setRoots] = useState<{ id: string; displayName: string }[]>([]);
+  const [selectedPerson, setSelectedPerson] = useState<PickedPerson | null>(null);
+  const [depth, setDepth] = useState<number | null>(null);
   const [hoveredPos, setHoveredPos] = useState<number | null>(null);
 
-  // Load roots list once (filtered by loydOnly)
+  // Start at the explicit URL person or William, the first Loyd in the book.
   useEffect(() => {
-    const qs = isLoydOnly ? "&loydOnly=true" : "";
-    fetch(`/api/ancestors?personId=__roots_only__&depth=0${qs}`)
-      .then((r) => r.json())
-      .then((d) => {
-        setRoots(d.roots ?? []);
-        if (d.roots?.[0]) setSelectedId(d.roots[0].id);
-      })
-      .finally(() => setRootsLoading(false));
-  }, [isLoydOnly]);
+    let cancelled = false;
+    void (async () => {
+      const urlPersonId = new URLSearchParams(window.location.search).get("personId");
+      if (urlPersonId) {
+        const response = await fetch(`/api/search?id=${encodeURIComponent(urlPersonId)}`);
+        const data = response.ok ? await response.json() : null;
+        const person = data?.people?.[0] as PickedPerson | undefined;
+        if (!cancelled && person) { setSelectedPerson(person); setSelectedId(person.id); }
+        return;
+      }
+      const response = await fetch("/api/account/default-people");
+      const data = response.ok ? await response.json() : null;
+      const person = data?.root as PickedPerson | null;
+      if (!cancelled && person) { setSelectedPerson(person); setSelectedId(person.id); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const fetchAncestors = useCallback(async () => {
     if (!selectedId) return;
     setLoading(true);
     try {
       const loydParam = isLoydOnly ? "&loydOnly=true" : "";
-      const res = await fetch(`/api/ancestors?personId=${selectedId}&depth=${depth}${loydParam}`);
+      const depthParam = depth == null ? "" : `&depth=${depth}`;
+      const res = await fetch(`/api/ancestors?personId=${selectedId}${depthParam}${loydParam}`);
       if (res.ok) setData(await res.json());
     } finally {
       setLoading(false);
@@ -80,31 +82,35 @@ export default function FanChartPage() {
     if (selectedId) fetchAncestors();
   }, [fetchAncestors, selectedId]);
 
+  const chartSize = (44 + (data?.maxDepth ?? 1) * 68 + 20) * 2;
+
   // Build SVG fan chart
   const svgContent = useMemo(() => {
     if (!data || data.ancestors.length === 0) return null;
 
-    const W = 600;
-    const H = 600;
-    const cx = W / 2;
-    const cy = H / 2 + 20;
     const innerR = 44;
     const ringW = 68;
+    const maxGen = data.maxDepth;
+    const cx = chartSize / 2;
+    const cy = chartSize / 2;
 
     const ancMap = new Map(data.ancestors.map((a) => [a.pedigreePosition, a]));
 
     const elements: React.ReactNode[] = [];
-    const maxGen = Math.min(depth, MAX_DEPTH);
-
     for (let gen = 1; gen <= maxGen; gen++) {
       const startPos = Math.pow(2, gen);
       const endPos = Math.pow(2, gen + 1) - 1;
       const count = endPos - startPos + 1;
+      const recordedAncestors = data.ancestors
+        .filter((ancestor) => ancestor.pedigreePosition >= startPos && ancestor.pedigreePosition <= endPos)
+        .sort((a, b) => a.pedigreePosition - b.pedigreePosition);
       const gapAngle = gen === 1 ? 0 : 1; // degrees gap between sections
       const r0 = innerR + (gen - 1) * ringW;
       const r1 = r0 + ringW - 2;
 
-      for (let pos = startPos; pos <= endPos; pos++) {
+      // Only draw recorded ancestors. Missing pedigree positions are not fake people.
+      for (const ancestor of recordedAncestors) {
+        const pos = ancestor.pedigreePosition;
         const idx = pos - startPos;
         const sliceDeg = 360 / count;
         const startDeg = -90 + idx * sliceDeg + gapAngle / 2;
@@ -133,7 +139,6 @@ export default function FanChartPage() {
           "Z",
         ].join(" ");
 
-        const ancestor = ancMap.get(pos);
         const colors = nodeColor(ancestor?.gender ?? "UNKNOWN");
         const isHovered = hoveredPos === pos;
 
@@ -196,8 +201,8 @@ export default function FanChartPage() {
       </g>
     );
 
-    return elements;
-  }, [data, depth, hoveredPos]);
+    return <>{elements}</>;
+  }, [data, hoveredPos, chartSize]);
 
   const hoveredAncestor = hoveredPos != null ? data?.ancestors.find((a) => a.pedigreePosition === hoveredPos) : null;
 
@@ -216,35 +221,33 @@ export default function FanChartPage() {
           <div className="flex items-center gap-2">
             <GitBranch className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">Subject:</span>
-            {rootsLoading ? (
-              <Skeleton className="h-9 w-[260px]" />
+            {loading ? (
+              <Skeleton className="h-9 w-full max-w-[260px]" />
             ) : (
-              <Select value={selectedId} onValueChange={setSelectedId}>
-                <SelectTrigger className="w-[260px]">
-                  <SelectValue placeholder="Select person" />
-                </SelectTrigger>
-                <SelectContent className="max-h-[300px]">
-                  {roots.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>{r.displayName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="min-w-0 flex-1 sm:w-[300px] sm:flex-none"><PersonPicker value={selectedPerson} onChange={(person) => { setDepth(null); setSelectedPerson(person); setSelectedId(person?.id ?? ""); }} label="Fan chart starting person" placeholder="Search name or family number…" /></div>
             )}
           </div>
 
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Depth:</span>
-            {([1, 2, 3, 4] as const).map((d) => (
-              <Button
-                key={d}
+            <Button
                 size="sm"
-                variant={depth === d ? "default" : "outline"}
+                variant="outline"
                 className="h-8 w-8 p-0"
-                onClick={() => setDepth(d)}
-              >
-                {d}
-              </Button>
-            ))}
+                aria-label="Reduce fan chart depth"
+                onClick={() => setDepth((current) => current == null ? Math.max(1, (data?.maxDepth ?? 1) - 1) : Math.max(1, current - 1))}
+                disabled={depth === 1 || (depth == null && (data?.maxDepth ?? 1) <= 1)}
+              ><Minus className="h-3 w-3" /></Button>
+            <Badge variant="secondary" className="min-w-[2.5rem] justify-center">{depth ?? "Full"}</Badge>
+            <Button size="sm" variant={depth == null ? "default" : "outline"} className="h-8 px-2" onClick={() => setDepth(null)} disabled={depth == null}>Full</Button>
+            <Button
+                size="sm"
+                variant="outline"
+                className="h-8 w-8 p-0"
+                aria-label="Increase fan chart depth"
+                onClick={() => setDepth((current) => current == null ? null : current + 1)}
+                disabled={depth == null}
+              ><Plus className="h-3 w-3" /></Button>
           </div>
 
           {data && (
@@ -256,16 +259,16 @@ export default function FanChartPage() {
       </Card>
 
       {/* Chart */}
-      <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
         <Card className="border-border/50 bg-card/80 backdrop-blur overflow-hidden">
-          <CardContent className="p-0 flex items-center justify-center" style={{ minHeight: 520 }}>
+          <CardContent className="min-w-0 p-0 flex items-center justify-center overflow-auto" style={{ minHeight: 520 }}>
             {loading ? (
               <div className="text-center space-y-3">
                 <div className="h-12 w-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mx-auto" />
                 <p className="text-sm text-muted-foreground">Building fan chart…</p>
               </div>
             ) : data && data.ancestors.length > 0 ? (
-              <svg viewBox="0 0 600 600" className="w-full max-w-[520px]" style={{ userSelect: "none" }}>
+              <svg viewBox={`0 0 ${chartSize} ${chartSize}`} className="max-w-none" style={{ userSelect: "none", width: chartSize, height: chartSize }}>
                 {svgContent}
               </svg>
             ) : (
@@ -310,12 +313,9 @@ export default function FanChartPage() {
                 </div>
                 <div className="text-xs text-muted-foreground space-y-1">
                   <p>Ahnentafel #{hoveredAncestor.pedigreePosition}</p>
-                  {hoveredAncestor.pedigreePosition === 2 && <p className="text-primary font-medium">Father</p>}
-                  {hoveredAncestor.pedigreePosition === 3 && <p className="text-primary font-medium">Mother</p>}
-                  {hoveredAncestor.pedigreePosition === 4 && <p className="text-primary font-medium">Paternal Grandfather</p>}
-                  {hoveredAncestor.pedigreePosition === 5 && <p className="text-primary font-medium">Paternal Grandmother</p>}
-                  {hoveredAncestor.pedigreePosition === 6 && <p className="text-primary font-medium">Maternal Grandfather</p>}
-                  {hoveredAncestor.pedigreePosition === 7 && <p className="text-primary font-medium">Maternal Grandmother</p>}
+                  {hoveredAncestor.relationshipType && hoveredAncestor.pedigreePosition !== 1 && (
+                    <p className="text-primary font-medium">Recorded {hoveredAncestor.relationshipType.toLowerCase()} parent link</p>
+                  )}
                 </div>
               </div>
             ) : (

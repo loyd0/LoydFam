@@ -25,6 +25,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { X, ExternalLink, User as UserIcon } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
+import { usePermissions } from "@/hooks/use-permissions";
 
 // ─── Shared types ─────────────────────────────────────────────
 export interface TreePerson {
@@ -41,6 +43,7 @@ export interface TreePerson {
   generation: number | null;
   spouseNames: string[];
   isLoyd: boolean;
+  photoUrl?: string | null;
 }
 
 export interface TreeEdge {
@@ -120,9 +123,12 @@ function PersonNodeComponent({
         isConnectable={false}
         style={{ opacity: 0, background: "transparent" }}
       />
-      <p className={`text-xs font-semibold truncate${dimmed ? " text-muted-foreground" : ""}`}>
-        {shortName}
-      </p>
+      <div className="flex items-center justify-center gap-1.5">
+        {data.photoUrl ? <Image src={data.photoUrl} alt="" width={24} height={24} unoptimized className="h-6 w-6 shrink-0 rounded-full object-cover" /> : null}
+        <p className={`text-xs font-semibold truncate${dimmed ? " text-muted-foreground" : ""}`}>
+          {shortName}
+        </p>
+      </div>
       <p className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">{years}</p>
       {data.isLiving && (
         <span className="inline-block mt-1 text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
@@ -148,12 +154,13 @@ function ProfileCard({
   person: TreePerson;
   onClose: () => void;
 }) {
+  const { can } = usePermissions();
   const generation = person.generation;
   const shortName = person.displayName.split("(")[0]?.trim() || person.displayName;
   const years = `${person.birthYear ?? "?"}–${person.isLiving ? "present" : person.deathYear ?? "?"}`;
 
   return (
-    <div className="absolute top-4 right-4 z-50 w-80 animate-in fade-in slide-in-from-right-4 duration-200">
+    <div className="absolute inset-x-3 top-3 z-20 max-h-[calc(100%-1.5rem)] overflow-y-auto sm:inset-x-auto sm:right-4 sm:w-80 animate-in fade-in slide-in-from-right-4 duration-200">
       <Card className="border-primary/20 shadow-lg bg-card">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
@@ -175,7 +182,7 @@ function ProfileCard({
                       : "var(--color-muted-foreground)",
                 }}
               >
-                <UserIcon className="h-5 w-5" />
+                {person.photoUrl ? <Image src={person.photoUrl} alt="" width={40} height={40} unoptimized className="h-full w-full rounded-full object-cover" /> : <UserIcon className="h-5 w-5" />}
               </div>
               <div>
                 <CardTitle className="text-sm leading-tight">{shortName}</CardTitle>
@@ -186,6 +193,7 @@ function ProfileCard({
               size="icon"
               variant="ghost"
               className="h-7 w-7 -mt-1 -mr-1"
+              aria-label="Close person preview"
               onClick={(e) => {
                 e.stopPropagation();
                 onClose();
@@ -250,7 +258,7 @@ function ProfileCard({
           </div>
 
           {/* Full profile link */}
-          <Button
+          {can("people.view") && <Button
             asChild
             variant="outline"
             size="sm"
@@ -260,7 +268,7 @@ function ProfileCard({
               View Full Profile
               <ExternalLink className="ml-1.5 h-3 w-3" />
             </Link>
-          </Button>
+          </Button>}
         </CardContent>
       </Card>
     </div>
@@ -271,7 +279,7 @@ function ProfileCard({
 // Pure presentation: receives a laid-out-able TreeData and renders the
 // interactive React Flow graph. No data-fetching here — callers (the live
 // page, the demo page) own that, which keeps this component testable.
-export function FamilyTreeCanvas({ data }: { data: TreeData }) {
+export function FamilyTreeCanvas({ data, focusPersonId }: { data: TreeData; focusPersonId?: string }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const rfInstance = useRef<ReactFlowInstance<Node, Edge> | null>(null);
@@ -328,6 +336,18 @@ export function FamilyTreeCanvas({ data }: { data: TreeData }) {
     return () => clearTimeout(t);
   }, [data, setNodes, setEdges, focusOnRoot]);
 
+  useEffect(() => {
+    if (!focusPersonId) return;
+    const person = data.nodes.find((node) => node.id === focusPersonId);
+    if (!person) return;
+    const timer = window.setTimeout(() => {
+      setSelectedPerson(person);
+      rfInstance.current?.fitView({ nodes: [{ id: person.id }], padding: 0.7, maxZoom: 1,
+        duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 300 });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [focusPersonId, data]);
+
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
       const person = data.nodes.find((n) => n.id === node.id);
@@ -337,7 +357,7 @@ export function FamilyTreeCanvas({ data }: { data: TreeData }) {
   );
 
   return (
-    <div className="h-[600px] relative">
+    <div className="relative h-[min(70svh,600px)] min-h-[360px]">
       <ReactFlow
         nodes={nodes}
         edges={edges}

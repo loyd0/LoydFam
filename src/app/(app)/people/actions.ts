@@ -2,9 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
+import { Prisma } from "@/generated/prisma/client";
+import { auditedPrisma } from "@/lib/audited-prisma";
+import { AuthzError, requireAdmin, requirePermission, requireOwnedPerson } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/authz";
+import { parsePersonPatch } from "@/lib/amendment-validation";
 import { logActivity, describeChange } from "@/lib/activity";
+import { assertValidEvent, assertValidParentType, normalizeEventDateFields, wouldCreateParentCycle } from "@/lib/genealogy-validation";
+import { resolveHistoricalPlace } from "@/lib/places";
 
 function stripEmpty<T extends object>(obj: T): Partial<T> {
   const out: Record<string, unknown> = {};
@@ -52,8 +57,9 @@ export interface PersonPatch {
 
 export async function createPerson(patch: PersonPatch): Promise<{ id: string }> {
   const session = await requireAdmin();
+  const db = auditedPrisma(session.user, "Create family person");
   const displayName = buildDisplayName(patch);
-  const person = await prisma.person.create({
+  const person = await db.person.create({
     data: {
       ...stripEmpty(patch),
       displayName,
@@ -78,19 +84,23 @@ export async function updatePerson(
   id: string,
   patch: PersonPatch,
 ): Promise<{ id: string; displayName: string }> {
-  const session = await requireAdmin();
-  const before = await prisma.person.findUniqueOrThrow({ where: { id } });
-  const merged = { ...before, ...stripEmpty(patch) };
+  const session = await requireOwnedPerson(id);
+  const parsed = parsePersonPatch(patch);
+  if (!parsed) throw new Error("The person changes contain unsupported fields.");
+  const safePatch = parsed as PersonPatch;
+  const db = auditedPrisma(session.user, "Update family person");
+  const before = await db.person.findUniqueOrThrow({ where: { id } });
+  const merged = { ...before, ...stripEmpty(safePatch) };
   const displayName = buildDisplayName(merged);
 
-  const updated = await prisma.person.update({
-    where: { id },
-    data: { ...stripEmpty(patch), displayName },
+  const updated = await db.person.update({
+    where: session.user.role === "ADMIN" ? { id } : { id, verifiedUsers: { some: { id: session.user.id } } },
+    data: { ...stripEmpty(safePatch), displayName },
   });
 
   const { changed, diff } = describeChange(
     before as unknown as Record<string, unknown>,
-    { ...stripEmpty(patch), displayName } as Partial<Record<string, unknown>>,
+    { ...stripEmpty(safePatch), displayName } as Partial<Record<string, unknown>>,
   );
 
   if (changed.length > 0) {
@@ -110,8 +120,9 @@ export async function updatePerson(
 
 export async function deletePerson(id: string): Promise<void> {
   const session = await requireAdmin();
-  const person = await prisma.person.findUniqueOrThrow({ where: { id } });
-  await prisma.person.delete({ where: { id } });
+  const db = auditedPrisma(session.user, "Delete family person");
+  const person = await db.person.findUniqueOrThrow({ where: { id } });
+  await db.person.delete({ where: { id } });
   await logActivity({
     actorUserId: session.user.id,
     type: "ENTITY_DELETED",
@@ -133,15 +144,92 @@ export interface EventInput {
   dateText?: string | null;
   dateIsApprox?: boolean;
   description?: string | null;
+  locationText?: string | null;
+}
+
+async function resolveOrCreateEventPlace(tx: Prisma.TransactionClient, sourceText: string | null | undefined): Promise<string | null> {
+  if (sourceText == null || sourceText.trim() === "") return null;
+  const resolution = resolveHistoricalPlace(sourceText);
+  const type = resolution?.kind ?? "OTHER";
+  const name = resolution?.canonical ?? sourceText.trim();
+  const lat = resolution?.lat ?? null;
+  const lng = resolution?.lng ?? null;
+  const existing = await tx.place.findFirst({
+    where: resolution
+      ? { type, name, lat, lng }
+      : { type: "OTHER", name, sourceText },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+  const place = await tx.place.create({
+    data: {
+      type,
+      name,
+      country: null,
+      lat,
+      lng,
+      sourceText,
+    },
+    select: { id: true },
+  });
+  return place.id;
+}
+
+async function eventTransaction<T>(db: import("@/generated/prisma/client").PrismaClient, operation: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await db.$transaction(operation, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (attempt === 0 && error && typeof error === "object" && "code" in error && error.code === "P2034") continue;
+      if (error && typeof error === "object" && "code" in error && error.code === "P2034") {
+        throw new Error("The event data changed while saving. Please try again.");
+      }
+      throw error;
+    }
+  }
+  throw new Error("The event data changed while saving. Please try again.");
+}
+
+const EVENT_ADMIN_REVIEW_MESSAGE = "This event is not exclusively linked to your verified person record. Ask an administrator to review the change.";
+
+async function requireEventEditor(personId: string) {
+  try {
+    return await requireOwnedPerson(personId);
+  } catch (error) {
+    if (error instanceof AuthzError && error.status === 403) {
+      throw new Error("Only an administrator or the verified person can edit this event. Otherwise, submit an amendment for administrator review.");
+    }
+    throw error;
+  }
+}
+
+async function assertVerifiedEventOwner(tx: Prisma.TransactionClient, userId: string, personId: string): Promise<void> {
+  const user = await tx.user.findUnique({ where: { id: userId }, select: { verifiedPersonId: true } });
+  if (user?.verifiedPersonId !== personId) throw new Error(EVENT_ADMIN_REVIEW_MESSAGE);
+}
+
+async function assertPersonalEvent(tx: Prisma.TransactionClient, eventId: string, personId: string): Promise<void> {
+  const event = await tx.event.findUnique({
+    where: { id: eventId },
+    select: {
+      personEvents: { select: { personId: true } },
+      partnershipStarts: { select: { id: true } },
+      partnershipEnds: { select: { id: true } },
+    },
+  });
+  if (!event || event.personEvents.length !== 1 || event.personEvents[0]?.personId !== personId || event.partnershipStarts.length > 0 || event.partnershipEnds.length > 0) {
+    throw new Error(EVENT_ADMIN_REVIEW_MESSAGE);
+  }
 }
 
 function normalizeEventData(input: EventInput) {
+  const date = normalizeEventDateFields(input);
   return stripEmpty({
     type: input.type,
-    dateExact: input.dateExact ? new Date(input.dateExact) : null,
-    dateYear: input.dateYear ?? null,
-    dateMonth: input.dateMonth ?? null,
-    dateDay: input.dateDay ?? null,
+    dateExact: date.dateExact ? new Date(date.dateExact) : null,
+    dateYear: date.dateYear,
+    dateMonth: date.dateMonth,
+    dateDay: date.dateDay,
     dateText: input.dateText ?? null,
     dateIsApprox: input.dateIsApprox ?? false,
     descriptionMd: input.description ?? null,
@@ -153,20 +241,32 @@ export async function addEvent(
   input: EventInput,
   role: string = "subject",
 ): Promise<{ eventId: string }> {
-  const session = await requireAdmin();
-  const event = await prisma.event.create({
-    data: {
-      ...normalizeEventData(input),
-      personEvents: { create: { personId, role } },
-    } as never,
+  const session = await requireEventEditor(personId);
+  const db = auditedPrisma(session.user, "Add person event");
+  assertValidEvent(input);
+  if (input.locationText != null && (typeof input.locationText !== "string" || input.locationText.length > 500)) {
+    throw new Error("Location must be 500 characters or fewer.");
+  }
+  const event = await eventTransaction(db, async (tx) => {
+    if (session.user.role !== "ADMIN") await assertVerifiedEventOwner(tx, session.user.id, personId);
+    const person = await tx.person.findUnique({ where: { id: personId }, select: { id: true } });
+    if (!person) throw new Error("That person could not be found. Refresh the page and try again.");
+    const placeId = await resolveOrCreateEventPlace(tx, input.locationText);
+    return tx.event.create({
+      data: {
+        ...normalizeEventData(input),
+        placeId,
+        personEvents: { create: { personId, role: session.user.role === "ADMIN" ? role : "subject" } },
+      } as never,
+      select: { id: true },
+    });
   });
-  const person = await prisma.person.findUnique({ where: { id: personId } });
   await logActivity({
     actorUserId: session.user.id,
     type: "EVENT_CREATED",
     entityType: "person",
     entityId: personId,
-    message: `Added ${input.type.toLowerCase()} event for ${person?.displayName ?? personId}`,
+    message: `Added ${input.type.toLowerCase()} event for ${personId}`,
     meta: { eventId: event.id, ...input },
   });
   revalidatePath(`/people/${personId}`);
@@ -178,10 +278,24 @@ export async function updateEvent(
   personId: string,
   input: EventInput,
 ): Promise<void> {
-  const session = await requireAdmin();
-  await prisma.event.update({
-    where: { id: eventId },
-    data: normalizeEventData(input) as never,
+  const session = await requireEventEditor(personId);
+  const db = auditedPrisma(session.user, "Update person event");
+  assertValidEvent(input);
+  if (input.locationText != null && (typeof input.locationText !== "string" || input.locationText.length > 500)) {
+    throw new Error("Location must be 500 characters or fewer.");
+  }
+  await eventTransaction(db, async (tx) => {
+    const linkage = await tx.personEvent.findFirst({ where: { eventId, personId }, select: { id: true } });
+    if (!linkage) throw new Error("This event is no longer linked to that person. Refresh the page and try again.");
+    if (session.user.role !== "ADMIN") {
+      await assertVerifiedEventOwner(tx, session.user.id, personId);
+      await assertPersonalEvent(tx, eventId, personId);
+    }
+    const placeId = await resolveOrCreateEventPlace(tx, input.locationText);
+    return tx.event.update({
+      where: { id: eventId },
+      data: { ...normalizeEventData(input), placeId } as never,
+    });
   });
   await logActivity({
     actorUserId: session.user.id,
@@ -195,8 +309,17 @@ export async function updateEvent(
 }
 
 export async function deleteEvent(eventId: string, personId: string): Promise<void> {
-  const session = await requireAdmin();
-  await prisma.event.delete({ where: { id: eventId } });
+  const session = await requireEventEditor(personId);
+  const db = auditedPrisma(session.user, "Delete person event");
+  await eventTransaction(db, async (tx) => {
+    const linkage = await tx.personEvent.findFirst({ where: { eventId, personId }, select: { id: true } });
+    if (!linkage) throw new Error("This event is no longer linked to that person. Refresh the page and try again.");
+    if (session.user.role !== "ADMIN") {
+      await assertVerifiedEventOwner(tx, session.user.id, personId);
+      await assertPersonalEvent(tx, eventId, personId);
+    }
+    await tx.event.delete({ where: { id: eventId } });
+  });
   await logActivity({
     actorUserId: session.user.id,
     type: "EVENT_DELETED",
@@ -212,15 +335,35 @@ export async function deleteEvent(eventId: string, personId: string): Promise<vo
 
 export async function addParent(childId: string, parentId: string, type: string = "BIOLOGICAL"): Promise<void> {
   const session = await requireAdmin();
-  if (childId === parentId) throw new Error("A person cannot be their own parent");
-  await prisma.parentChild.upsert({
-    where: { parentId_childId: { parentId, childId } },
-    update: { type: type as never },
-    create: { parentId, childId, type: type as never },
-  });
+  const db = auditedPrisma(session.user, "Add parent-child relationship");
+  assertValidParentType(type);
+  if (childId === parentId) throw new Error("A person cannot be their own parent.");
+  try {
+    await db.$transaction(async (tx) => {
+      const [parent, child] = await Promise.all([
+        tx.person.findUnique({ where: { id: parentId }, select: { id: true } }),
+        tx.person.findUnique({ where: { id: childId }, select: { id: true } }),
+      ]);
+      if (!parent || !child) throw new Error("That person could not be found. Refresh the page and try again.");
+      const edges = await tx.parentChild.findMany({ select: { parentId: true, childId: true } });
+      if (wouldCreateParentCycle(edges, parentId, childId)) {
+        throw new Error("This parent relationship would create a family tree cycle. Remove the conflicting link first.");
+      }
+      await tx.parentChild.upsert({
+        where: { parentId_childId: { parentId, childId } },
+        update: { type },
+        create: { parentId, childId, type },
+      });
+    }, { isolationLevel: "Serializable" });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "P2034") {
+      throw new Error("The family tree changed while saving. Refresh the page and try again.");
+    }
+    throw error;
+  }
   const [parent, child] = await Promise.all([
-    prisma.person.findUnique({ where: { id: parentId } }),
-    prisma.person.findUnique({ where: { id: childId } }),
+    db.person.findUnique({ where: { id: parentId } }),
+    db.person.findUnique({ where: { id: childId } }),
   ]);
   await logActivity({
     actorUserId: session.user.id,
@@ -236,7 +379,10 @@ export async function addParent(childId: string, parentId: string, type: string 
 
 export async function removeParentChild(parentId: string, childId: string): Promise<void> {
   const session = await requireAdmin();
-  await prisma.parentChild.delete({
+  const db = auditedPrisma(session.user, "Remove parent-child relationship");
+  const relationship = await db.parentChild.findUnique({ where: { parentId_childId: { parentId, childId } }, select: { id: true } });
+  if (!relationship) throw new Error("That parent relationship no longer exists. Refresh the page and try again.");
+  await db.parentChild.delete({
     where: { parentId_childId: { parentId, childId } },
   });
   await logActivity({
@@ -258,17 +404,21 @@ export async function addPartnership(
   notes?: string,
 ): Promise<void> {
   const session = await requireAdmin();
+  const db = auditedPrisma(session.user, "Add partnership");
   if (personAId === personBId) throw new Error("A person cannot partner with themselves");
+  if (!["MARRIAGE", "PARTNER", "UNKNOWN"].includes(type)) throw new Error("Choose a valid partnership type.");
   // Normalise ordering so (a,b) and (b,a) don't duplicate
   const [a, b] = [personAId, personBId].sort();
-  await prisma.partnership.upsert({
+  const people = await db.person.findMany({ where: { id: { in: [a, b] } }, select: { id: true } });
+  if (people.length !== 2) throw new Error("That person could not be found. Refresh the page and try again.");
+  await db.partnership.upsert({
     where: { personAId_personBId: { personAId: a, personBId: b } },
     update: { type, notesMd: notes ?? null },
     create: { personAId: a, personBId: b, type, notesMd: notes ?? null },
   });
   const [pa, pb] = await Promise.all([
-    prisma.person.findUnique({ where: { id: a } }),
-    prisma.person.findUnique({ where: { id: b } }),
+    db.person.findUnique({ where: { id: a } }),
+    db.person.findUnique({ where: { id: b } }),
   ]);
   await logActivity({
     actorUserId: session.user.id,
@@ -284,9 +434,10 @@ export async function addPartnership(
 
 export async function removePartnership(partnershipId: string): Promise<void> {
   const session = await requireAdmin();
-  const p = await prisma.partnership.findUnique({ where: { id: partnershipId } });
+  const db = auditedPrisma(session.user, "Remove partnership");
+  const p = await db.partnership.findUnique({ where: { id: partnershipId } });
   if (!p) return;
-  await prisma.partnership.delete({ where: { id: partnershipId } });
+  await db.partnership.delete({ where: { id: partnershipId } });
   await logActivity({
     actorUserId: session.user.id,
     type: "RELATIONSHIP_DELETED",
@@ -303,24 +454,26 @@ export async function removePartnership(partnershipId: string): Promise<void> {
 
 export async function addTag(personId: string, rawName: string): Promise<void> {
   const session = await requireAdmin();
+  const db = auditedPrisma(session.user, "Add person tag");
   const name = rawName.trim();
   if (!name) throw new Error("Tag name is required");
+  if (name.length > 100) throw new Error("Tag name must be 100 characters or fewer.");
 
-  // Find or create the tag (case-insensitive match on name).
-  const existing = await prisma.tag.findFirst({
-    where: { name: { equals: name, mode: "insensitive" } },
-  });
-  const tag = existing ?? (await prisma.tag.create({ data: { name } }));
+  const { tag, person } = await db.$transaction(async (tx) => {
+    const person = await tx.person.findUnique({ where: { id: personId }, select: { id: true, displayName: true } });
+    if (!person) throw new Error("That person could not be found. Refresh the page and try again.");
+    // Serialize the case-insensitive lookup with creation and linking. This also
+    // ensures a failed link cannot leave an unreferenced tag behind.
+    const existing = await tx.tag.findFirst({ where: { name: { equals: name, mode: "insensitive" } } });
+    const tag = existing ?? await tx.tag.create({ data: { name } });
+    await tx.tagLink.upsert({
+      where: { tagId_entityType_entityId: { tagId: tag.id, entityType: "PERSON", entityId: personId } },
+      update: {},
+      create: { tagId: tag.id, entityType: "PERSON", entityId: personId },
+    });
+    return { tag, person };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
-  await prisma.tagLink.upsert({
-    where: {
-      tagId_entityType_entityId: { tagId: tag.id, entityType: "PERSON", entityId: personId },
-    },
-    update: {},
-    create: { tagId: tag.id, entityType: "PERSON", entityId: personId },
-  });
-
-  const person = await prisma.person.findUnique({ where: { id: personId } });
   await logActivity({
     actorUserId: session.user.id,
     type: "TAG_ADDED",
@@ -333,15 +486,14 @@ export async function addTag(personId: string, rawName: string): Promise<void> {
 }
 
 export async function removeTag(personId: string, tagId: string): Promise<void> {
-  await requireAdmin();
-  await prisma.tagLink.deleteMany({
-    where: { tagId, entityType: "PERSON", entityId: personId },
-  });
-  // Clean up orphaned tags (no remaining links) to keep the tag list tidy.
-  const remaining = await prisma.tagLink.count({ where: { tagId } });
-  if (remaining === 0) {
-    await prisma.tag.delete({ where: { id: tagId } }).catch(() => {});
-  }
+  const session = await requireAdmin();
+  const db = auditedPrisma(session.user, "Remove family tag");
+  await db.$transaction(async (tx) => {
+    await tx.tagLink.deleteMany({ where: { tagId, entityType: "PERSON", entityId: personId } });
+    // Clean up orphaned tags (no remaining links) to keep the tag list tidy.
+    const remaining = await tx.tagLink.count({ where: { tagId } });
+    if (remaining === 0) await tx.tag.deleteMany({ where: { id: tagId } });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   revalidatePath(`/people/${personId}`);
 }
 
@@ -357,7 +509,15 @@ export interface ContactPatch {
 }
 
 export async function upsertContact(personId: string, patch: ContactPatch): Promise<void> {
-  const session = await requireAdmin();
+  const session = await requireOwnedPerson(personId);
+  if (!patch || typeof patch !== "object" || Array.isArray(patch) ||
+    Object.keys(patch).some((key) => !["emails", "mobile", "landline", "address2000", "postalAddress2021", "comments"].includes(key)) ||
+    (patch.emails !== undefined && (!Array.isArray(patch.emails) || patch.emails.length > 10 || patch.emails.some((email) => typeof email !== "string" || email.length > 320))) ||
+    [patch.mobile, patch.landline, patch.address2000, patch.postalAddress2021, patch.comments]
+      .some((value) => value !== undefined && value !== null && (typeof value !== "string" || value.length > 5000))) {
+    throw new Error("Contact details contain unsupported fields.");
+  }
+  const db = auditedPrisma(session.user, "Update person contact details");
   const data = {
     emails: patch.emails ?? [],
     mobile: patch.mobile ?? null,
@@ -366,7 +526,7 @@ export async function upsertContact(personId: string, patch: ContactPatch): Prom
     postalAddress2021: patch.postalAddress2021 ?? null,
     comments: patch.comments ?? null,
   };
-  await prisma.contact.upsert({
+  await db.contact.upsert({
     where: { personId },
     update: data,
     create: { personId, ...data },
@@ -394,8 +554,17 @@ export async function createNote(
   entityId: string,
   input: NoteInput,
 ): Promise<{ id: string }> {
-  const session = await requireAdmin();
-  const note = await prisma.note.create({
+  const session = await requirePermission("notes.edit");
+  if (session.user.role !== "ADMIN") {
+    if (entityType !== "PERSON") throw new AuthzError(403, "Only admins can edit notes for shared records.");
+    await requireOwnedPerson(entityId, "notes.edit");
+  }
+  if (!entityId || typeof entityId !== "string" || !input || typeof input.markdown !== "string" ||
+    input.markdown.length > 50_000 || (input.title != null && (typeof input.title !== "string" || input.title.length > 300))) {
+    throw new Error("Note content is invalid or too long.");
+  }
+  const db = auditedPrisma(session.user, "Create family note");
+  const note = await db.note.create({
     data: {
       entityType,
       entityId,
@@ -421,9 +590,18 @@ export async function updateNote(
   noteId: string,
   input: NoteInput,
 ): Promise<void> {
-  const session = await requireAdmin();
+  const session = await requirePermission("notes.edit");
   const existing = await prisma.note.findUniqueOrThrow({ where: { id: noteId } });
-  await prisma.note.update({
+  if (session.user.role !== "ADMIN") {
+    if (existing.entityType !== "PERSON") throw new AuthzError(403, "Only admins can edit notes for shared records.");
+    await requireOwnedPerson(existing.entityId, "notes.edit");
+  }
+  if (!input || typeof input.markdown !== "string" || input.markdown.length > 50_000 ||
+    (input.title != null && (typeof input.title !== "string" || input.title.length > 300))) {
+    throw new Error("Note content is invalid or too long.");
+  }
+  const db = auditedPrisma(session.user, "Update family note");
+  await db.note.update({
     where: { id: noteId },
     data: {
       title: input.title ?? null,
@@ -443,9 +621,14 @@ export async function updateNote(
 }
 
 export async function deleteNote(noteId: string): Promise<void> {
-  const session = await requireAdmin();
+  const session = await requirePermission("notes.edit");
   const existing = await prisma.note.findUniqueOrThrow({ where: { id: noteId } });
-  await prisma.note.delete({ where: { id: noteId } });
+  if (session.user.role !== "ADMIN") {
+    if (existing.entityType !== "PERSON") throw new AuthzError(403, "Only admins can edit notes for shared records.");
+    await requireOwnedPerson(existing.entityId, "notes.edit");
+  }
+  const db = auditedPrisma(session.user, "Delete family note");
+  await db.note.delete({ where: { id: noteId } });
   await logActivity({
     actorUserId: session.user.id,
     type: "NOTE_DELETED",

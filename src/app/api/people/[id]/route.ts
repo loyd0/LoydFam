@@ -1,6 +1,10 @@
+import { mediaUrl } from "@/lib/media-url";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getProperties } from "@/lib/research-store";
+import { apiPermissionError } from "@/lib/permission-guards";
+import { getUserPermissions } from "@/lib/permission-store";
 
 export async function GET(
   _request: NextRequest,
@@ -10,6 +14,9 @@ export async function GET(
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const denied = await apiPermissionError("people.view", session.user);
+  if (denied) return denied;
+  const permissions = await getUserPermissions(session.user);
 
   const { id } = await params;
 
@@ -18,7 +25,7 @@ export async function GET(
     include: {
       aliases: true,
       events: {
-        include: { event: true },
+        include: { event: { include: { place: true, _count: { select: { personEvents: true, partnershipStarts: true, partnershipEnds: true } } } } },
         orderBy: { event: { dateYear: "asc" } },
       },
       parentRelations: {
@@ -105,8 +112,17 @@ export async function GET(
     })),
   ];
 
+  const owned = session.user.role === "ADMIN" || (await prisma.user.findUnique({ where: { id: session.user.id }, select: { verifiedPersonId: true } }))?.verifiedPersonId === person.id;
   return NextResponse.json({
     ...person,
+    events: person.events.map(link => ({ ...link, canEdit: session.user.role === "ADMIN" || (owned && link.event._count.personEvents === 1 && link.event._count.partnershipStarts === 0 && link.event._count.partnershipEnds === 0), event: { ...link.event, _count: undefined } })),
+    properties: permissions["properties.view"] ? (await getProperties()).filter(p => p.people.some(link => link.id === person.id)).map(({ slug, name, location }) => ({ slug, name, location })) : [],
+    mediaLinks: person.mediaLinks.map(link => ({ ...link, media: { ...link.media, blobUrl: mediaUrl(link.media.id), blobKey: undefined } })),
+    notes: person.notes.map((note) => ({
+      ...note,
+      createdBy: note.createdBy ? { ...note.createdBy, email: session.user.role === "ADMIN" ? note.createdBy.email : null } : null,
+    })),
+    contact: owned ? person.contact : null,
     parents: person.parentRelations.map((r) => ({ ...r.parent, relationId: r.id })),
     children: person.childRelations.map((r) => ({ ...r.child, relationId: r.id })),
     spouses,

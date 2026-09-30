@@ -70,9 +70,9 @@ export default function DataQualityPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-5 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Data Quality</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Data Quality</h1>
         <p className="mt-1 text-muted-foreground">
           Review missing data flags, conflicts, and potential duplicates.
         </p>
@@ -139,7 +139,7 @@ export default function DataQualityPage() {
                 >
                   <SeverityIcon severity={issue.severity} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <Badge variant="outline" className="text-[10px]">
                         {issue.code}
                       </Badge>

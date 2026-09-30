@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { usePermissions } from "@/hooks/use-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,7 @@ import {
 } from "@/app/(app)/people/actions";
 
 interface PersonEvent {
+  canEdit?: boolean;
   id: string;
   eventId?: string;
   event: {
@@ -54,6 +55,11 @@ interface PersonEvent {
     dateText: string | null;
     dateIsApprox: boolean;
     descriptionMd?: string | null;
+    place?: {
+      name: string;
+      country: string | null;
+      sourceText: string | null;
+    } | null;
   };
   role: string;
 }
@@ -97,6 +103,7 @@ interface MediaLinkRecord {
   sortOrder: number;
   media: {
     id: string;
+    type: "PHOTO" | "DOCUMENT" | "OTHER";
     blobUrl: string;
     mimeType: string | null;
     caption: string | null;
@@ -106,6 +113,7 @@ interface MediaLinkRecord {
 }
 
 export interface PersonDetail {
+  properties?: { slug: string; name: string; location: string }[];
   id: string;
   displayName: string;
   surname: string | null;
@@ -269,7 +277,7 @@ function EditButton({ onClick, label = "Edit" }: { onClick: () => void; label?: 
 
 function AddButton({ onClick, label }: { onClick: () => void; label: string }) {
   return (
-    <Button variant="outline" size="xs" onClick={onClick}>
+    <Button variant="outline" size="xs" className="min-h-11 min-w-11" aria-label={label} onClick={onClick}>
       <Plus className="h-3 w-3" />
       <span className="hidden sm:inline">{label}</span>
     </Button>
@@ -283,9 +291,9 @@ interface PersonProfileProps {
 }
 
 export function PersonProfile({ personId, onNavigate, standalone = false }: PersonProfileProps) {
-  const { data: session } = useSession();
+  const { can, isAdmin, ownedPersonId } = usePermissions();
   const router = useRouter();
-  const isAdmin = session?.user?.role === "ADMIN";
+  const canEditPerson = isAdmin && can("people.edit");
   const [pending, startTransition] = useTransition();
 
   const [person, setPerson] = useState<PersonDetail | null>(null);
@@ -424,7 +432,7 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
             >
               {person.displayName}
             </h2>
-            {isAdmin && standalone && (
+            {canEditPerson && standalone && (
               <div className="shrink-0 print:hidden">
                 <EditButton onClick={() => setIdentityOpen(true)} />
               </div>
@@ -463,6 +471,7 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
             )}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
+            {!isAdmin && <Button asChild variant="outline" className="min-h-11 print:hidden"><Link href={`/people/${person.id}/amend`}><Pencil className="mr-2 size-4" />{ownedPersonId === person.id ? "Edit my record" : "Suggest an amendment"}</Link></Button>}
             {!standalone && (
               <Button asChild variant="outline" size="sm" className="gap-1.5">
                 <Link href={`/people/${person.id}`}>
@@ -482,7 +491,7 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
                 Print
               </Button>
             )}
-            {isAdmin && standalone && (
+            {canEditPerson && standalone && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -502,9 +511,15 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
       <TagsSection
         personId={person.id}
         tags={person.tags ?? []}
-        canEdit={isAdmin}
+        canEdit={canEditPerson}
         onChange={refreshAfterEdit}
       />
+
+      {!!person.properties?.length && <section className="space-y-3 rounded-xl border p-4 sm:p-5">
+        <h2 className="text-lg font-semibold">Places in this record</h2>
+        <p className="text-sm text-muted-foreground">Explore the histories and sources for properties mentioned in this person’s family record.</p>
+        <div className="flex flex-wrap gap-2">{person.properties.map((property) => <Link key={property.slug} href={`/properties/${property.slug}`} className="inline-flex min-h-11 items-center rounded-lg bg-muted px-3 py-2 text-sm font-medium text-primary underline-offset-4 hover:underline">{property.name}</Link>)}</div>
+      </section>}
 
       <div className="grid gap-8 md:grid-cols-2">
         {/* Key Facts */}
@@ -512,7 +527,7 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
           <SectionHeader
             icon={<UserIcon className="h-5 w-5 opacity-70 text-muted-foreground" />}
             title="Key Facts"
-            action={isAdmin ? <EditButton onClick={() => setIdentityOpen(true)} /> : null}
+            action={canEditPerson ? <EditButton onClick={() => setIdentityOpen(true)} /> : null}
           />
           <div className="space-y-4 pt-2">
             {person.surname && <Fact label="Surname" value={person.surname} />}
@@ -549,7 +564,7 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
               label="Parents"
               people={person.parents}
               onNavigate={onNavigate}
-              isAdmin={isAdmin}
+              canEditPerson={canEditPerson}
               onRemove={(id) => handleRemoveParent(id)}
               onAdd={() => setRelationMode("parent")}
               emptyLabel="Add parent"
@@ -560,7 +575,7 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Spouse{person.spouses.length > 1 ? "s" : ""}
                 </p>
-                {isAdmin && (
+                {canEditPerson && (
                   <AddButton onClick={() => setRelationMode("spouse")} label="Add" />
                 )}
               </div>
@@ -577,7 +592,7 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
                         <p className="text-xs text-muted-foreground ml-6 mt-0.5">{s.notes}</p>
                       )}
                     </div>
-                    {isAdmin && s.partnershipId && (
+                    {canEditPerson && s.partnershipId && (
                       <Button
                         variant="ghost"
                         size="icon-xs"
@@ -590,7 +605,7 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
                     )}
                   </div>
                 ))}
-                {person.spouses.length === 0 && isAdmin && (
+                {person.spouses.length === 0 && canEditPerson && (
                   <p className="text-xs text-muted-foreground italic">No spouses linked.</p>
                 )}
               </div>
@@ -600,13 +615,13 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
               label={`Children (${person.children.length})`}
               people={person.children}
               onNavigate={onNavigate}
-              isAdmin={isAdmin}
+              canEditPerson={canEditPerson}
               onRemove={(id) => handleRemoveChild(id)}
               onAdd={() => setRelationMode("child")}
               emptyLabel="Add child"
             />
 
-            {!isAdmin &&
+            {!canEditPerson &&
               person.parents.length === 0 &&
               person.spouses.length === 0 &&
               person.children.length === 0 && (
@@ -621,7 +636,7 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
             icon={<Calendar className="h-5 w-5 opacity-70 text-muted-foreground" />}
             title="Timeline"
             action={
-              isAdmin ? (
+              (canEditPerson || ownedPersonId === person.id) ? (
                 <AddButton onClick={() => setNewEventOpen(true)} label="Add event" />
               ) : null
             }
@@ -642,17 +657,24 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
                         {formatDate(pe.event)}
                         {pe.event.dateIsApprox && " (approx.)"}
                       </p>
+                      {pe.event.place && (
+                        <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                          <MapPin className="h-3 w-3 shrink-0" />
+                          {pe.event.place.sourceText || [pe.event.place.name, pe.event.place.country].filter(Boolean).join(", ")}
+                        </p>
+                      )}
                       {pe.event.descriptionMd && (
                         <p className="mt-1 text-xs text-muted-foreground">
                           {pe.event.descriptionMd}
                         </p>
                       )}
                     </div>
-                    {isAdmin && (
+                    {pe.canEdit && (
                       <Button
                         variant="ghost"
                         size="icon-xs"
-                        className="opacity-0 group-hover:opacity-100 print:hidden"
+                        className="print:hidden"
+                        aria-label={`Edit ${pe.event.type.toLowerCase()} event`}
                         onClick={() => setEditingEvent(pe)}
                       >
                         <Pencil className="h-3 w-3" />
@@ -672,7 +694,7 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
           <SectionHeader
             icon={<Heart className="h-5 w-5 opacity-70 text-muted-foreground" />}
             title="Contact"
-            action={isAdmin ? <EditButton onClick={() => setContactOpen(true)} /> : null}
+            action={(canEditPerson || ownedPersonId === person.id) ? <EditButton onClick={() => setContactOpen(true)} /> : null}
           />
           <div className="space-y-4 pt-2">
             {person.contact?.emails && person.contact.emails.length > 0 && (
@@ -688,19 +710,19 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
             {person.contact?.address2000 && (
               <Fact label="Address (2000)" value={person.contact.address2000} />
             )}
-            {!person.contact && isAdmin && (
+            {!person.contact && (canEditPerson || ownedPersonId === person.id) && (
               <p className="text-xs text-muted-foreground italic">No contact details yet.</p>
             )}
           </div>
         </div>
 
         {/* Biography */}
-        {(person.biographyMd || person.biographyShortMd || isAdmin) && (
+        {(person.biographyMd || person.biographyShortMd || canEditPerson) && (
           <div className="space-y-4 border-t border-border/40 pt-6 md:col-span-2">
             <SectionHeader
               icon={<BookOpen className="h-5 w-5 opacity-70 text-muted-foreground" />}
               title="Biography"
-              action={isAdmin ? <EditButton onClick={() => setIdentityOpen(true)} /> : null}
+              action={canEditPerson ? <EditButton onClick={() => setIdentityOpen(true)} /> : null}
             />
             <div className="pt-2">
               {person.biographyMd || person.biographyShortMd ? (
@@ -720,7 +742,7 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
             <PhotoGallery
               personId={person.id}
               mediaLinks={person.mediaLinks ?? []}
-              canEdit={isAdmin}
+              canEdit={can("media.upload") && (isAdmin || ownedPersonId === person.id)}
               onChange={refreshAfterEdit}
             />
           </div>
@@ -733,7 +755,7 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
               entityType="PERSON"
               entityId={person.id}
               notes={person.notes ?? []}
-              canEdit={isAdmin}
+              canEdit={can("notes.edit") && (isAdmin || ownedPersonId === person.id)}
               onChange={refreshAfterEdit}
             />
           </div>
@@ -747,8 +769,62 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
         )}
       </div>
 
+      {(canEditPerson || ownedPersonId === person.id) && (
+          <PersonContactDialog
+            personId={person.id}
+            initial={{
+              emails: person.contact?.emails ?? [],
+              mobile: person.contact?.mobile ?? null,
+              landline: person.contact?.landline ?? null,
+              address2000: person.contact?.address2000 ?? null,
+              postalAddress2021: person.contact?.postalAddress2021 ?? null,
+              comments: person.contact?.comments ?? null,
+            }}
+            open={contactOpen}
+            onOpenChange={(o) => {
+              setContactOpen(o);
+              if (!o) refreshAfterEdit();
+            }}
+          />
+      )}
+
+      {(canEditPerson || ownedPersonId === person.id) && <>
+          <EventDialog
+            personId={person.id}
+            open={newEventOpen}
+            onOpenChange={(o) => {
+              setNewEventOpen(o);
+              if (!o) refreshAfterEdit();
+            }}
+          />
+          {editingEvent && (
+            <EventDialog
+              personId={person.id}
+              existing={{
+                eventId: editingEvent.event.id,
+                type: editingEvent.event.type as "BIRTH" | "DEATH" | "MARRIAGE" | "RESIDENCE" | "OTHER",
+                dateExact: editingEvent.event.dateExact,
+                dateYear: editingEvent.event.dateYear,
+                dateMonth: editingEvent.event.dateMonth,
+                dateDay: editingEvent.event.dateDay,
+                dateText: editingEvent.event.dateText,
+                dateIsApprox: editingEvent.event.dateIsApprox,
+                description: editingEvent.event.descriptionMd,
+                locationText: editingEvent.event.place?.sourceText || [editingEvent.event.place?.name, editingEvent.event.place?.country].filter(Boolean).join(", "),
+              }}
+              open={!!editingEvent}
+              onOpenChange={(o) => {
+                if (!o) {
+                  setEditingEvent(null);
+                  refreshAfterEdit();
+                }
+              }}
+            />
+          )}
+      </>}
+
       {/* Edit dialogs */}
-      {isAdmin && (
+      {canEditPerson && (
         <>
           <PersonIdentityDialog
             personId={person.id}
@@ -772,53 +848,6 @@ export function PersonProfile({ personId, onNavigate, standalone = false }: Pers
               if (!o) refreshAfterEdit();
             }}
           />
-          <PersonContactDialog
-            personId={person.id}
-            initial={{
-              emails: person.contact?.emails ?? [],
-              mobile: person.contact?.mobile ?? null,
-              landline: person.contact?.landline ?? null,
-              address2000: person.contact?.address2000 ?? null,
-              postalAddress2021: person.contact?.postalAddress2021 ?? null,
-              comments: person.contact?.comments ?? null,
-            }}
-            open={contactOpen}
-            onOpenChange={(o) => {
-              setContactOpen(o);
-              if (!o) refreshAfterEdit();
-            }}
-          />
-          <EventDialog
-            personId={person.id}
-            open={newEventOpen}
-            onOpenChange={(o) => {
-              setNewEventOpen(o);
-              if (!o) refreshAfterEdit();
-            }}
-          />
-          {editingEvent && (
-            <EventDialog
-              personId={person.id}
-              existing={{
-                eventId: editingEvent.event.id,
-                type: editingEvent.event.type as "BIRTH" | "DEATH" | "MARRIAGE" | "RESIDENCE" | "OTHER",
-                dateExact: editingEvent.event.dateExact,
-                dateYear: editingEvent.event.dateYear,
-                dateMonth: editingEvent.event.dateMonth,
-                dateDay: editingEvent.event.dateDay,
-                dateText: editingEvent.event.dateText,
-                dateIsApprox: editingEvent.event.dateIsApprox,
-                description: editingEvent.event.descriptionMd,
-              }}
-              open={!!editingEvent}
-              onOpenChange={(o) => {
-                if (!o) {
-                  setEditingEvent(null);
-                  refreshAfterEdit();
-                }
-              }}
-            />
-          )}
           {relationMode && (
             <RelationshipDialog
               personId={person.id}
@@ -856,7 +885,7 @@ function RelationList({
   label,
   people,
   onNavigate,
-  isAdmin,
+  canEditPerson,
   onRemove,
   onAdd,
   emptyLabel,
@@ -864,7 +893,7 @@ function RelationList({
   label: string;
   people: RelatedPerson[];
   onNavigate?: (id: string) => void;
-  isAdmin: boolean;
+  canEditPerson: boolean;
   onRemove: (id: string) => void;
   onAdd: () => void;
   emptyLabel: string;
@@ -875,7 +904,7 @@ function RelationList({
         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
           {label}
         </p>
-        {isAdmin && <AddButton onClick={onAdd} label={emptyLabel} />}
+        {canEditPerson && <AddButton onClick={onAdd} label={emptyLabel} />}
       </div>
       <div className="space-y-1">
         {people.map((p) => (
@@ -883,7 +912,7 @@ function RelationList({
             <div className="flex-1 min-w-0">
               <PersonLink person={p} onNavigate={onNavigate} />
             </div>
-            {isAdmin && (
+            {canEditPerson && (
               <Button
                 variant="ghost"
                 size="icon-xs"
@@ -896,7 +925,7 @@ function RelationList({
             )}
           </div>
         ))}
-        {people.length === 0 && isAdmin && (
+        {people.length === 0 && canEditPerson && (
           <p className="text-xs text-muted-foreground italic">None linked.</p>
         )}
       </div>

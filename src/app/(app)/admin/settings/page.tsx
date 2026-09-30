@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -29,7 +30,7 @@ import {
   Send,
   Link as LinkIcon,
 } from "lucide-react";
-import { createInvite } from "@/app/(app)/admin/actions";
+import { createInvite, revokeInvite } from "@/app/(app)/admin/actions";
 
 interface UserRecord {
   id: string;
@@ -58,6 +59,8 @@ export default function AdminSettingsPage() {
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState("VIEWER");
   const [inviting, setInviting] = useState(false);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [inviteResult, setInviteResult] = useState<{
     success: boolean;
     message: string;
@@ -110,7 +113,7 @@ export default function AdminSettingsPage() {
           : `Invite created for ${result.email} — copy the link below and share it`,
         acceptUrl: result.acceptUrl,
         emailSent: result.emailSent,
-        emailFallback: result.emailFallback,
+        emailFallback: result.emailFallback || result.emailError,
       });
       setInviteEmail("");
       setInviteName("");
@@ -123,6 +126,19 @@ export default function AdminSettingsPage() {
       });
     } finally {
       setInviting(false);
+    }
+  }
+
+  async function handleRevoke(inviteId: string) {
+    setRevoking(inviteId);
+    setActionError(null);
+    try {
+      await revokeInvite(inviteId);
+      await loadData();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Unable to revoke invitation");
+    } finally {
+      setRevoking(null);
     }
   }
 
@@ -148,15 +164,19 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-5 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-          <Settings className="h-8 w-8 text-primary" />
+        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
+          <Settings className="h-6 w-6 shrink-0 text-primary sm:h-8 sm:w-8" />
           Admin Settings
         </h1>
         <p className="mt-1 text-muted-foreground">
           Manage users, roles, and invitations.
         </p>
+        <Link href="/admin/permissions" className="mt-3 inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-muted">
+          <Shield className="h-4 w-4" />
+          Manage permissions
+        </Link>
       </div>
 
       {/* Create new user */}
@@ -200,20 +220,20 @@ export default function AdminSettingsPage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-end gap-3">
-              <div className="space-y-2">
+            <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end">
+              <div className="w-full space-y-2 sm:w-40">
                 <Label htmlFor="invite-role">Role</Label>
                 <select
                   id="invite-role"
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
                   <option value="VIEWER">Viewer</option>
                   <option value="ADMIN">Admin</option>
                 </select>
               </div>
-              <Button type="submit" disabled={inviting}>
+              <Button type="submit" className="w-full sm:w-auto" disabled={inviting}>
                 {inviting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -320,12 +340,12 @@ export default function AdminSettingsPage() {
               {users.map((user) => (
                 <div
                   key={user.id}
-                  className="flex items-center gap-3 py-3"
+                  className="flex flex-wrap items-center gap-3 py-3"
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-medium">
                     {(user.name || user.email)[0]?.toUpperCase()}
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-[calc(100%-3rem)] flex-1 sm:min-w-0">
                     <p className="text-sm font-medium truncate">
                       {user.name || user.email}
                     </p>
@@ -339,7 +359,7 @@ export default function AdminSettingsPage() {
                       handleRoleChange(user.id, e.target.value)
                     }
                     disabled={user.id === session?.user?.id}
-                    className="h-8 rounded-md border border-input bg-transparent px-2 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+                    className="h-11 min-w-24 rounded-md border border-input bg-transparent px-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 sm:h-8 sm:text-xs"
                   >
                     <option value="ADMIN">Admin</option>
                     <option value="VIEWER">Viewer</option>
@@ -369,6 +389,7 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
 
+      {actionError && <p role="alert" className="text-sm text-destructive">{actionError}</p>}
       {/* Pending invites */}
       <Card className="border-border/50 bg-card/80 backdrop-blur">
         <CardHeader>
@@ -385,7 +406,7 @@ export default function AdminSettingsPage() {
               {invites.map((inv) => (
                 <div
                   key={inv.id}
-                  className="flex items-center gap-3 py-3"
+                  className="flex flex-wrap items-center gap-3 py-3"
                 >
                   <Mail className="h-4 w-4 text-muted-foreground" />
                   <div className="flex-1">
@@ -407,6 +428,13 @@ export default function AdminSettingsPage() {
                   >
                     {inv.status}
                   </Badge>
+                  {inv.status === "PENDING" && (
+                    <Button variant="outline" size="sm" disabled={revoking !== null}
+                      aria-label={`Revoke invitation for ${inv.email}`}
+                      onClick={() => handleRevoke(inv.id)}>
+                      {revoking === inv.id ? "Revoking…" : "Revoke"}
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>

@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseLoydOnly, LOYD_ONLY_SQL } from "@/lib/loyd-filter";
+import { apiPermissionError } from "@/lib/permission-guards";
+import { getUserPermissions } from "@/lib/permission-store";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const denied = await apiPermissionError("dashboard.view", session.user);
+  if (denied) return denied;
+  const permissions = await getUserPermissions(session.user);
 
   const { searchParams } = new URL(request.url);
   const loydOnly = parseLoydOnly(searchParams);
@@ -128,22 +133,22 @@ export async function GET(request: NextRequest) {
     ]);
 
   return NextResponse.json({
-    stats: {
+    stats: permissions["stats.view"] ? {
       totalPeople,
       livingCount,
       totalEvents,
       issueCount,
-    },
-    dataQuality: {
+    } : null,
+    dataQuality: session.user.role === "ADMIN" ? {
       missingDob,
       missingDod,
       missingParents,
       missingGender,
       missingSpouse,
-    },
-    upcomingBirthdays,
-    recentActivity,
-    lastImport: lastImport
+    } : null,
+    upcomingBirthdays: permissions["people.view"] ? upcomingBirthdays : [],
+    recentActivity: session.user.role === "ADMIN" && permissions["history.view"] ? recentActivity : [],
+    lastImport: session.user.role === "ADMIN" && lastImport
       ? {
           id: lastImport.id,
           status: lastImport.status,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { loydOnlyWhere, parseLoydOnly } from "@/lib/loyd-filter";
+import { getUserPermissions } from "@/lib/permission-store";
 
 /**
  * Data export endpoint. Supports CSV, JSON and GEDCOM (5.5.1) formats.
@@ -12,6 +13,10 @@ export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const permissions = await getUserPermissions(session.user);
+  if (!permissions["people.view"] || !permissions["sources.download"]) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);

@@ -58,17 +58,17 @@
   --radius: 0.5rem;
 
   /* ── Backgrounds ─────────────────────────────── */
-  --background: oklch(0.99 0 0);
+  --background: oklch(0.98 0.008 85);
   /* Pure clean white */
   --foreground: oklch(0.15 0.05 160);
   /* Very dark green/slate */
 
   /* ── Cards ───────────────────────────────────── */
-  --card: oklch(1 0 0);
+  --card: oklch(0.995 0.003 85);
   --card-foreground: oklch(0.15 0.05 160);
 
   /* ── Popovers ────────────────────────────────── */
-  --popover: oklch(1 0 0);
+  --popover: oklch(0.995 0.003 85);
   --popover-foreground: oklch(0.15 0.05 160);
 
   /* ── Primary: Deep Forest Green                  */
@@ -202,13 +202,136 @@
     @apply bg-background text-foreground overflow-x-hidden;
   }
 
-  /* Page titles wear the display serif; everything else stays in the
-     humanist sans for legibility. Slight negative tracking keeps the
-     serif from feeling loose at large sizes. */
+  /* Sans-serif headings keep the archive clear and readable. */
   h1,
   h2 {
     font-family: var(--font-display);
     letter-spacing: -0.01em;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 520px) and (min-width: 768px) and (max-width: 1023px) {
+  [data-slot="sidebar"] { display: none !important; }
+  .mobile-bottom-nav { display: block !important; }
+  .app-main { padding: 0.5rem 0.75rem 4rem !important; }
+  .family-map-page { gap: 0.5rem !important; }
+  .family-map-description,
+  .family-map-connection-help { display: none !important; }
+  .family-map-filter-trigger,
+  .family-map-panel-tabs { display: flex !important; }
+  .family-map-filter-card { display: none !important; }
+  .family-map-filter-card.block { display: block !important; }
+  .family-map-page[data-mobile-panel="places"] .family-map-canvas,
+  .family-map-page[data-mobile-panel="map"] .family-map-places { display: none !important; }
+  .family-map-canvas { min-height: calc(100svh - 180px) !important; }
+}
+
+/* Phone layouts: keep controls reachable and the app inside the safe areas. */
+@media (max-width: 767px) {
+  html,
+  body {
+    min-width: 320px;
+    min-height: 100%;
+    overscroll-behavior-x: none;
+  }
+
+  [data-sidebar="menu-button"] {
+    min-height: 44px;
+  }
+
+  [data-slot="button"] {
+    min-height: 44px;
+  }
+
+  [data-size="icon"],
+  [data-size="icon-sm"],
+  [data-size="icon-lg"] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  [data-slot="table-container"] {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .leaflet-control-zoom a {
+    width: 44px !important;
+    height: 44px !important;
+    line-height: 42px !important;
+  }
+
+  .app-header {
+    height: calc(3.5rem + env(safe-area-inset-top, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Landscape phones and compact tablets get the same map-first navigation. */
+@media (orientation: landscape) and (max-height: 520px) and (min-width: 768px) and (max-width: 1023px) {
+  [data-slot="sidebar"].group.peer {
+    display: none;
+  }
+
+  .mobile-bottom-nav {
+    display: block;
+  }
+
+  .app-main {
+    padding: 0.5rem 0.75rem 4rem;
+  }
+
+  .family-map-page > * + * {
+    margin-block-start: 0.5rem;
+  }
+
+  .family-map-description,
+  .family-map-connection-help {
+    display: none;
+  }
+
+  .family-map-filter-trigger,
+  .family-map-panel-tabs {
+    display: flex;
+  }
+
+  .family-map-filter-card {
+    display: none;
+  }
+
+  .family-map-page .family-map-filter-card.block {
+    display: block;
+  }
+
+  .family-map-page[data-mobile-panel="map"] .family-map-places,
+  .family-map-page[data-mobile-panel="places"] .family-map-canvas {
+    display: none;
+  }
+
+  .family-map-page .family-map-canvas {
+    min-height: calc(100svh - 180px);
   }
 }
 

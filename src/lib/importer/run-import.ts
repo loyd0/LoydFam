@@ -10,9 +10,11 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { auditedPrisma } from "@/lib/audited-prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import { parseWorkbook, hashRow } from "./parse-workbook";
 import { extractCanonical } from "./canonical-extract";
+import { archiveSourceWorkbook } from "@/lib/source-storage";
 import type {
   PersonPayload,
   EventPayload,
@@ -31,6 +33,49 @@ export interface ImportSummary {
   partnershipsCreated: number;
   contactsUpserted: number;
   issuesCount: number;
+  alreadyImported?: boolean;
+}
+
+export interface ImportPreview {
+  sha256: string;
+  filename: string;
+  alreadyImported: boolean;
+  savedSummary: ImportSummary | null;
+  sheets: { sheetName: string; rows: number; columns: number }[];
+  rawRows: number;
+  counts: { people: number; events: number; parentChild: number; partnerships: number; contacts: number };
+  existingPeople: { key: string; displayName: string }[];
+  newPeople: { key: string; displayName: string }[];
+}
+
+/** Read-only workbook analysis used by the upload preview. */
+export async function previewImport(fileBuffer: Buffer, originalFilename: string): Promise<ImportPreview> {
+  const parsed = parseWorkbook(fileBuffer);
+  const canonical = extractCanonical(parsed.sheets);
+  const existingFile = await prisma.sourceFile.findUnique({ where: { sha256: parsed.sha256 }, select: { id: true } });
+  const completedRun = existingFile ? await prisma.importRun.findFirst({
+    where: { sourceFileId: existingFile.id, status: "COMPLETED" },
+    orderBy: { startedAt: "desc" },
+    select: { id: true, summary: true },
+  }) : null;
+  const keys = canonical.people.map((person) => person.primaryExternalKey);
+  const existing = await prisma.person.findMany({ where: { primaryExternalKey: { in: keys } }, select: { primaryExternalKey: true, displayName: true } });
+  const existingKeys = new Set(existing.map((person) => person.primaryExternalKey));
+  const savedSummary = completedRun?.summary && typeof completedRun.summary === "object"
+    ? { importRunId: completedRun.id, ...(completedRun.summary as Omit<ImportSummary, "importRunId">), alreadyImported: true } as ImportSummary
+    : null;
+
+  return {
+    sha256: parsed.sha256,
+    filename: originalFilename,
+    alreadyImported: Boolean(completedRun),
+    savedSummary,
+    sheets: parsed.sheets.map((sheet) => ({ sheetName: sheet.sheetName, rows: sheet.rows.length, columns: sheet.headers.length })),
+    rawRows: parsed.sheets.reduce((sum, sheet) => sum + sheet.rows.length, 0),
+    counts: { people: canonical.people.length, events: canonical.events.length, parentChild: canonical.parentChild.length, partnerships: canonical.partnerships.length, contacts: canonical.contacts.length },
+    existingPeople: canonical.people.filter((person) => existingKeys.has(person.primaryExternalKey)).map((person) => ({ key: person.primaryExternalKey, displayName: person.displayName })),
+    newPeople: canonical.people.filter((person) => !existingKeys.has(person.primaryExternalKey)).map((person) => ({ key: person.primaryExternalKey, displayName: person.displayName })),
+  };
 }
 
 /**
@@ -44,30 +89,75 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return chunks;
 }
 
+/** Exact source columns used by extractCanonical for person identities. */
+function sourcePersonKey(sheetName: string, row: Record<string, unknown>): string | null {
+  const value = (header: string) => row[header];
+  if (["Loyd List 1-190 - Edit", "Contacts"].includes(sheetName)) {
+    const id = value("Loyd ##");
+    return id == null || id === "" ? null : `LOYD:${String(id)}`;
+  }
+  if (["All Girls & Descendants", "Women from #85 onwards", "Women before #85"].includes(sheetName)) {
+    const id = value("Loyd ##");
+    return id == null || id === "" ? null : `GIRLS:${String(id)}`;
+  }
+  if (["Updated Bios & Spouse Details", "BiographyMarriageDetsCountries"].includes(sheetName)) {
+    const id = value("Loyd #");
+    return id == null || id === "" ? null : `LOYD:${String(id)}`;
+  }
+  if (sheetName === "Hatch&Match Details") {
+    const id = value("LOYD #");
+    return id == null || id === "" ? null : `LOYD:${String(id)}`;
+  }
+  return null;
+}
+
 export async function runImport(
   fileBuffer: Buffer,
   originalFilename: string,
-  userId?: string
+  userId?: string,
+  actorName?: string | null,
 ): Promise<ImportSummary> {
+  const db = auditedPrisma({ id: userId, name: actorName }, "Import family workbook");
   // 1. Parse workbook
   const parsed = parseWorkbook(fileBuffer);
 
+  // A completed import of this exact workbook is immutable history. Skipping it
+  // protects any hand-edited canonical data from being overwritten by a rerun.
+  const previousSource = await prisma.sourceFile.findUnique({ where: { sha256: parsed.sha256 }, select: { id: true, blobUrl: true } });
+  if (previousSource) {
+    const completedRun = await prisma.importRun.findFirst({
+      where: { sourceFileId: previousSource.id, status: "COMPLETED" },
+      orderBy: { startedAt: "desc" },
+      select: { id: true, summary: true },
+    });
+    if (completedRun) {
+      const saved = completedRun.summary && typeof completedRun.summary === "object" ? completedRun.summary as Partial<ImportSummary> : {};
+      return { ...saved, importRunId: completedRun.id, alreadyImported: true } as ImportSummary;
+    }
+  }
+
+  // Archive and checksum-verify the original bytes before writing the source
+  // file row or beginning any canonical data changes.
+  const blobUrl = await archiveSourceWorkbook(fileBuffer, parsed.sha256, originalFilename, previousSource?.blobUrl);
+
   // 2. Create source file record (upsert by sha256)
-  const sourceFile = await prisma.sourceFile.upsert({
+  const sourceFile = await db.sourceFile.upsert({
     where: { sha256: parsed.sha256 },
     create: {
       originalFilename,
       sha256: parsed.sha256,
       uploadedByUserId: userId,
+      blobUrl,
     },
     update: {
       originalFilename,
       uploadedByUserId: userId,
+      blobUrl,
     },
   });
 
   // 3. Create import run
-  const importRun = await prisma.importRun.create({
+  const importRun = await db.importRun.create({
     data: {
       sourceFileId: sourceFile.id,
       status: "RUNNING",
@@ -79,6 +169,7 @@ export async function runImport(
   try {
     // 4. Store raw sheets + rows (batched)
     let rawRowsStored = 0;
+    const importSheetIds = new Map<string, string>();
     for (const sheet of parsed.sheets) {
       const importSheet = await prisma.importSheet.create({
         data: {
@@ -87,6 +178,7 @@ export async function runImport(
           rowCount: sheet.rows.length,
         },
       });
+      importSheetIds.set(sheet.sheetName, importSheet.id);
 
       // Batch insert rows in chunks of MAX_OPS_PER_TXN
       const rowChunks = chunk(sheet.rows, MAX_OPS_PER_TXN);
@@ -115,13 +207,28 @@ export async function runImport(
 
     const peopleChunks = chunk(canonical.people, MAX_OPS_PER_TXN);
     for (const batch of peopleChunks) {
-      const results = await prisma.$transaction(
-        batch.map((p) => upsertPersonQuery(p))
-      );
+      const results = await db.$transaction((tx) => Promise.all(batch.map((p) => upsertPersonQuery(p, tx))));
       for (let i = 0; i < batch.length; i++) {
         personIdMap.set(batch[i].primaryExternalKey, results[i].id);
         peopleUpserted++;
       }
+    }
+
+    // Preserve traceability only for sheets whose identity column is the same
+    // stable key used by canonical extraction. Other raw rows remain unlinked.
+    const provenanceLinks: { importRowId: string; entityType: "PERSON"; entityId: string; reason: string }[] = [];
+    for (const sheet of parsed.sheets) {
+      const importSheetId = importSheetIds.get(sheet.sheetName);
+      if (!importSheetId || !sheet.rows.some((row) => sourcePersonKey(sheet.sheetName, row))) continue;
+      const rawRows = await prisma.importRow.findMany({ where: { importSheetId }, select: { id: true, rowIndex: true, rowJson: true } });
+      for (const rawRow of rawRows) {
+        const key = sourcePersonKey(sheet.sheetName, rawRow.rowJson as Record<string, unknown>);
+        const personId = key ? personIdMap.get(key) : null;
+        if (key && personId) provenanceLinks.push({ importRowId: rawRow.id, entityType: "PERSON", entityId: personId, reason: `source sheet ${sheet.sheetName}, row ${rawRow.rowIndex + 2}` });
+      }
+    }
+    for (const batch of chunk(provenanceLinks, MAX_OPS_PER_TXN * 20)) {
+      await prisma.importEntityLink.createMany({ data: batch });
     }
 
     // 7. Upsert events + person_events (batched — sequential within each event, batched across events)
@@ -131,7 +238,7 @@ export async function runImport(
     const eventChunks = chunk(canonical.events, MAX_OPS_PER_TXN);
     for (const batch of eventChunks) {
       // Events require find-then-upsert, so we do them in a sequential transaction
-      await prisma.$transaction(async (tx) => {
+      await db.$transaction(async (tx) => {
         for (const e of batch) {
           const personDbId = personIdMap.get(e.personKey);
           if (!personDbId) continue;
@@ -157,15 +264,13 @@ export async function runImport(
         .filter((x): x is NonNullable<typeof x> => x !== null);
 
       if (ops.length > 0) {
-        const results = await prisma.$transaction(
-          ops.map((op) =>
-            prisma.parentChild.upsert({
+        const results = await db.$transaction((tx) => Promise.all(ops.map((op) =>
+            tx.parentChild.upsert({
               where: { parentId_childId: { parentId: op.parentId, childId: op.childId } },
               create: { parentId: op.parentId, childId: op.childId, type: op.type },
               update: { type: op.type },
             })
-          )
-        );
+          )));
         relationshipsCreated += results.length;
       }
     }
@@ -185,15 +290,13 @@ export async function runImport(
         .filter((x): x is NonNullable<typeof x> => x !== null);
 
       if (ops.length > 0) {
-        const results = await prisma.$transaction(
-          ops.map((op) =>
-            prisma.partnership.upsert({
+        const results = await db.$transaction((tx) => Promise.all(ops.map((op) =>
+            tx.partnership.upsert({
               where: { personAId_personBId: { personAId: op.personAId, personBId: op.personBId } },
               create: { personAId: op.personAId, personBId: op.personBId, type: op.type, notesMd: op.notesMd },
               update: { notesMd: op.notesMd || undefined },
             })
-          )
-        );
+          )));
         partnershipsCreated += results.length;
       }
     }
@@ -211,9 +314,8 @@ export async function runImport(
         .filter((x): x is NonNullable<typeof x> => x !== null);
 
       if (ops.length > 0) {
-        const results = await prisma.$transaction(
-          ops.map((c) =>
-            prisma.contact.upsert({
+        const results = await db.$transaction((tx) => Promise.all(ops.map((c) =>
+            tx.contact.upsert({
               where: { personId: c.personId },
               create: {
                 personId: c.personId,
@@ -239,8 +341,7 @@ export async function runImport(
                 numberOfKids2000: c.numberOfKids2000,
               },
             })
-          )
-        );
+          )));
         contactsUpserted += results.length;
       }
     }
@@ -251,7 +352,7 @@ export async function runImport(
       // Batch insert issues
       const issueChunks = chunk(issues, MAX_OPS_PER_TXN);
       for (const batch of issueChunks) {
-        await prisma.importIssue.createMany({
+        await db.importIssue.createMany({
           data: batch.map((issue) => ({
             importRunId: importRun.id,
             ...issue,
@@ -273,7 +374,7 @@ export async function runImport(
       issuesCount: issues.length,
     };
 
-    await prisma.importRun.update({
+    await db.importRun.update({
       where: { id: importRun.id },
       data: {
         status: "COMPLETED",
@@ -295,7 +396,7 @@ export async function runImport(
     return summary;
   } catch (error) {
     // Mark import as failed
-    await prisma.importRun.update({
+    await db.importRun.update({
       where: { id: importRun.id },
       data: {
         status: "FAILED",
@@ -309,11 +410,9 @@ export async function runImport(
 
 // ─── Helpers ──────────────────────────────────────────────────
 
-/**
- * Returns a Prisma upsert query (not awaited) for use in $transaction([...]).
- */
-function upsertPersonQuery(p: PersonPayload) {
-  return prisma.person.upsert({
+/** Upsert a canonical person within an actor-scoped transaction. */
+function upsertPersonQuery(p: PersonPayload, tx: Prisma.TransactionClient) {
+  return tx.person.upsert({
     where: { primaryExternalKey: p.primaryExternalKey },
     create: {
       primaryExternalKey: p.primaryExternalKey,

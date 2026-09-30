@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { loydOnlyWhere, parseLoydOnly } from "@/lib/loyd-filter";
+import { parsePersonSearchQuery } from "@/lib/person-search";
+import type { Prisma } from "@/generated/prisma/client";
+import { apiPermissionError } from "@/lib/permission-guards";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const denied = await apiPermissionError("people.view", session.user);
+  if (denied) return denied;
 
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q")?.trim() || "";
@@ -20,8 +25,7 @@ export async function GET(request: NextRequest) {
   const loydOnly = parseLoydOnly(searchParams);
   const skip = (page - 1) * limit;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const andClauses: any[] = [{ isPlaceholder: false }];
+  const andClauses: Prisma.PersonWhereInput[] = [{ isPlaceholder: false }];
 
   // Loyd-only filter
   if (loydOnly) {
@@ -30,19 +34,27 @@ export async function GET(request: NextRequest) {
 
   // Text search — name fields
   if (q) {
-    andClauses.push({
-      OR: [
+    const parsedQuery = parsePersonSearchQuery(q);
+    const identifierSearch = parsedQuery.familyNumber !== null || (/^[A-Z0-9:#-]+$/i.test(q) && /\d/.test(q));
+    const exactWhere: Prisma.PersonWhereInput[] = parsedQuery.sourceSystem
+      ? [{ primaryExternalKey: { equals: `${parsedQuery.sourceSystem}:${parsedQuery.familyNumber}`, mode: "insensitive" } }]
+      : [
+          { externalId: { equals: parsedQuery.familyNumber ?? q.replace(/^#/, ""), mode: "insensitive" } },
+          { primaryExternalKey: { equals: q, mode: "insensitive" } },
+        ];
+    const nameWhere: Prisma.PersonWhereInput[] = [
         { displayName: { contains: q, mode: "insensitive" } },
         { surname: { contains: q, mode: "insensitive" } },
         { givenName1: { contains: q, mode: "insensitive" } },
         { knownAs: { contains: q, mode: "insensitive" } },
-      ],
-    });
+        { aliases: { some: { value: { contains: q, mode: "insensitive" } } } },
+    ];
+    andClauses.push({ OR: identifierSearch ? exactWhere : [...nameWhere, ...exactWhere] });
   }
 
   // Gender filter
   if (gender && ["MALE", "FEMALE", "UNKNOWN"].includes(gender)) {
-    andClauses.push({ gender });
+    andClauses.push({ gender: gender as "MALE" | "FEMALE" | "UNKNOWN" });
   }
 
   // Generation filter (separate AND so it doesn't collide with name OR)

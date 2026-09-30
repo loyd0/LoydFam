@@ -23,6 +23,8 @@ model User {
   emailVerified DateTime?
   image         String?
   passwordHash  String?
+  linkedPersonId String?
+  verifiedPersonId String?
   role          UserRole  @default(VIEWER)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -33,6 +35,8 @@ model User {
   savedViews   SavedView[]
   activities   Activity[]  @relation("actor")
   mediaUploads Media[]
+  linkedPerson Person? @relation("UserLinkedPerson", fields: [linkedPersonId], references: [id], onDelete: SetNull)
+  verifiedPerson Person? @relation("UserVerifiedPerson", fields: [verifiedPersonId], references: [id], onDelete: SetNull)
 
   @@map("users")
 }
@@ -273,6 +277,8 @@ model Person {
   tagLinks        TagLink[]     @relation("personTags")
   contact         Contact?
   personPlaces    PersonPlace[]
+  linkedUsers     User[]        @relation("UserLinkedPerson")
+  verifiedUsers   User[]        @relation("UserVerifiedPerson")
 
   @@index([displayName(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([surname(ops: raw("gin_trgm_ops"))], type: Gin)
@@ -656,4 +662,77 @@ enum PlaceType {
   HOUSE
   CEMETERY
   OTHER
+}
+
+// Published research is versioned independently from its original workbook.
+model PropertyArticle {
+  slug      String   @id
+  content   Json
+  version   Int      @default(1)
+  updatedAt DateTime @default(now()) @updatedAt
+  @@map("property_articles")
+}
+
+// Written by database triggers in the same transaction as each change.
+// No FK: deleted records and contributors retain their historical identifiers.
+model RecordRevision {
+  sequence    BigInt   @default(autoincrement()) @unique
+  id          String   @id @default(uuid())
+  entityType  String
+  entityId    String
+  operation   String
+  before      Json?
+  after       Json?
+  actorUserId String?
+  actorLabel  String
+  reason      String?
+  createdAt   DateTime @default(now())
+  @@index([entityType, entityId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("record_revisions")
+}
+
+// A single versioned policy keeps default and per-account overrides atomic.
+// Permission changes are written to record_revisions by the API transaction.
+model PermissionPolicy {
+  id        String   @id
+  defaults  Json
+  overrides Json
+  version   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("permission_policies")
+}
+
+enum AmendmentTargetType {
+  PERSON
+  PROPERTY
+}
+
+enum AmendmentStatus {
+  PENDING
+  APPROVED
+  APPLIED_MANUALLY
+  REJECTED
+}
+
+// Proposed changes remain separate from published records until reviewed.
+model Amendment {
+  id                String              @id @default(uuid())
+  targetType        AmendmentTargetType
+  targetId          String
+  baseVersion       String
+  payload           Json
+  note              String?             @db.Text
+  status            AmendmentStatus     @default(PENDING)
+  proposedByUserId  String
+  reviewedByUserId  String?
+  reviewReason      String?             @db.Text
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  reviewedAt        DateTime?
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([proposedByUserId, createdAt(sort: Desc)])
+  @@map("amendments")
 }

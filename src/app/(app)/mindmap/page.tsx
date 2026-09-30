@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useViewMode } from "@/hooks/use-view-mode";
+import { usePermissions } from "@/hooks/use-permissions";
 import {
   ReactFlow,
   Background,
@@ -16,16 +17,8 @@ import {
   MarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Network, Search, User as UserIcon, Plus, Minus, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+import { Network, Plus, Minus } from "lucide-react";
+import { PersonPicker, type PickedPerson } from "@/components/people/PersonPicker";
 
 // ─── Interfaces ──────────────────────────────────────────────────
 interface TreePerson {
@@ -53,6 +46,12 @@ interface RootOption {
   id: string;
   displayName: string;
   generation: number | null;
+  gender?: string;
+  externalId?: string | null;
+  sourceSystem?: string | null;
+  numberSystem?: string | null;
+  birthYear?: number | null;
+  deathYear?: number | null;
 }
 
 interface TreeData {
@@ -62,61 +61,25 @@ interface TreeData {
   roots: RootOption[];
 }
 
-interface SearchPerson {
-  id: string;
-  displayName: string;
-  surname: string | null;
-  gender: string;
-  generation: number | null;
-  birthYear: number | null;
-  deathYear: number | null;
-}
-
 // ─── Page Component ──────────────────────────────────────────────
 export default function MindMapPage() {
   const { isLoydOnly } = useViewMode();
+  const { can } = usePermissions();
   const [treeData, setTreeData] = useState<TreeData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [rootId, setRootId] = useState<string>("");
+  const [rootId, setRootId] = useState<string>(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("root") ?? "");
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
-
-  // Search Dialog State
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchPerson[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  // 1. Fetch search results directly
-  useEffect(() => {
-    if (searchQuery.length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    const timer = setTimeout(async () => {
-      setSearchLoading(true);
-      try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`);
-        if (res.ok) {
-          const data = await res.json();
-          setSearchResults(data.people || []);
-        }
-      } finally {
-        setSearchLoading(false);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  // 2. Fetch entire tree sub-graph (depth 10 to cover expansions locally)
+  // Fetch the complete recorded descendant tree for local expand/collapse.
   const fetchTree = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (rootId) params.set("root", rootId);
-      params.set("depth", "10"); // fetch up to 10 generations locally for client-side expansion
+      params.set("depth", "full");
       params.set("lineage", "full");
       if (isLoydOnly) params.set("loydOnly", "true");
 
@@ -127,8 +90,8 @@ export default function MindMapPage() {
         if (!rootId && data.rootId) {
           setRootId(data.rootId);
         }
-        // Initialize expanded nodes with just the root
-        setExpandedNodes(new Set([data.rootId || ""]));
+        // Start with all recorded descendants visible; each branch can be collapsed.
+        setExpandedNodes(new Set(data.nodes.map((person) => person.id)));
       }
     } finally {
       setLoading(false);
@@ -138,6 +101,11 @@ export default function MindMapPage() {
   useEffect(() => {
     fetchTree();
   }, [fetchTree]);
+
+  const selectedRoot = treeData?.roots.find((person) => person.id === rootId);
+  const selectedRootPerson: PickedPerson | null = selectedRoot
+    ? { ...selectedRoot, gender: selectedRoot.gender ?? "UNKNOWN" }
+    : null;
 
   // 3. Layout the tree whenever data or expanded nodes change
   useEffect(() => {
@@ -341,11 +309,7 @@ export default function MindMapPage() {
           </p>
         </div>
         
-        <Button onClick={() => setSearchOpen(true)} className="gap-2 shadow-sm">
-          <Search className="w-4 h-4" />
-          <span className="hidden sm:inline">Search Starting Person</span>
-          <span className="sm:hidden">Search</span>
-        </Button>
+        {can("people.view") && <div className="w-full max-w-md sm:w-[340px]"><PersonPicker value={selectedRootPerson} onChange={(person) => setRootId(person?.id ?? "")} label="Mind map starting person" placeholder="Search name or family number…" /></div>}
       </div>
 
       <div className="border border-border/40 bg-background overflow-hidden relative shadow-sm">
@@ -359,7 +323,7 @@ export default function MindMapPage() {
             <div className="flex flex-col items-center justify-center h-full space-y-3">
               <Network className="w-12 h-12 text-muted-foreground/30" />
               <p className="text-muted-foreground">No tree data found for this person.</p>
-              <Button variant="outline" onClick={() => setSearchOpen(true)}>Choose a different root</Button>
+              <p className="text-xs text-muted-foreground">Choose a different starting person above, or link yourself in Account Settings.</p>
             </div>
           ) : (
             <ReactFlow
@@ -386,59 +350,6 @@ export default function MindMapPage() {
         </div>
       </div>
 
-      {/* CMDK Search Dialog */}
-      <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <CommandInput 
-          placeholder="Search for a starting person..." 
-          value={searchQuery}
-          onValueChange={setSearchQuery}
-        />
-        <CommandList>
-          <CommandEmpty>
-            {searchLoading ? (
-              <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                Searching...
-              </div>
-            ) : (
-              "No people found."
-            )}
-          </CommandEmpty>
-          
-          <CommandGroup heading="People">
-            {searchResults.map((person) => (
-              <CommandItem
-                key={person.id}
-                onSelect={() => {
-                  setRootId(person.id);
-                  setSearchOpen(false);
-                  setSearchQuery("");
-                }}
-                className="flex items-center gap-3 py-3"
-              >
-                <div 
-                  className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-                  style={{
-                    backgroundColor: person.gender === "MALE" ? "var(--node-male-bg)" : person.gender === "FEMALE" ? "var(--node-female-bg)" : "var(--color-muted)",
-                    color: person.gender === "MALE" ? "var(--node-male)" : person.gender === "FEMALE" ? "var(--node-female)" : "var(--color-muted-foreground)",
-                  }}
-                >
-                  <UserIcon className="w-4 h-4" />
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="font-semibold text-sm truncate">{person.displayName}</span>
-                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                    <span>{person.birthYear ?? "?"} - {person.deathYear ?? "?"}</span>
-                    {person.generation != null && (
-                      <span className="px-1 py-0.5 rounded-sm bg-secondary text-secondary-foreground font-medium">Gen {person.generation}</span>
-                    )}
-                  </div>
-                </div>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </CommandList>
-      </CommandDialog>
     </div>
   );
 }

@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseLoydOnly } from "@/lib/loyd-filter";
+import { apiPermissionError } from "@/lib/permission-guards";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const denied = await apiPermissionError("timeline.view", session.user);
+  if (denied) return denied;
 
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type")?.toUpperCase();

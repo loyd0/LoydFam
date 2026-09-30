@@ -16,13 +16,17 @@ export default function ForgotPasswordPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const r = await requestPasswordReset(email.trim().toLowerCase());
-      setResult({ done: true, message: r.message });
+      try {
+        const r = await requestPasswordReset(email.trim().toLowerCase());
+        setResult({ done: true, message: r.message });
+      } catch {
+        setResult({ done: false, message: "Unable to request a reset right now. Please try again later." });
+      }
     });
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+    <div className="flex min-h-dvh items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -54,7 +58,9 @@ export default function ForgotPasswordPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  autoFocus
+                  autoComplete="email"
+                  inputMode="email"
+                  autoCapitalize="none"
                 />
               </div>
               <Button type="submit" disabled={pending} className="w-full h-11">
@@ -72,7 +78,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         <p className="text-center text-xs text-muted-foreground">
-          <Link href="/login" className="underline">Back to sign in</Link>
+          <Link href="/login" className="inline-flex min-h-11 items-center underline">Back to sign in</Link>
         </p>
       </div>
     </div>
